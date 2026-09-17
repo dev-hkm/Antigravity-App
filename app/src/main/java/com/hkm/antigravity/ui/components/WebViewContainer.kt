@@ -47,12 +47,10 @@ fun WebViewContainer(
 
     var webViewRef by remember { mutableStateOf<WebView?>(null) }
 
-    // Optimization CSS for mobile: kills laggy backdrop-filters, accelerates input & model picker
+    // Safe, targeted CSS optimizations for mobile
     fun injectWebOptimizations(view: WebView, dark: Boolean) {
         val bgHex = if (dark) "#0C0E14" else "#FFFFFF"
-        val surfaceHex = if (dark) "#141721" else "#F1F5F9"
         val textHex = if (dark) "#F1F5F9" else "#0F172A"
-        val borderHex = if (dark) "#242A38" else "#E2E8F0"
 
         val optScript = """
         (function() {
@@ -76,28 +74,31 @@ fun WebViewContainer(
                 document.head.appendChild(style);
             }
             style.innerHTML = `
-                /* 1. Eliminate heavy backdrop-blur that causes typing lag on mobile */
                 body, html {
                     background-color: $bgHex !important;
                     color: $textHex !important;
                     -webkit-font-smoothing: antialiased;
                 }
-                /* Hardware accelerate bottom input and chat container */
-                [role="textbox"], textarea, input {
-                    font-size: 15px !important;
-                    transform: translateZ(0) !important;
-                    -webkit-transform: translateZ(0) !important;
-                }
-                /* Optimize model selection pill */
-                [role="combobox"], [aria-haspopup="listbox"], button[class*="model"], div[class*="model"] {
+                /* Enlarge Add Context button so it is effortless to tap */
+                button[aria-label*="context" i], button[title*="context" i], button[aria-label*="Add" i] {
+                    min-width: 38px !important;
                     min-height: 38px !important;
-                    cursor: pointer !important;
-                    -webkit-tap-highlight-color: transparent !important;
-                    transform: translateZ(0) !important;
+                    display: inline-flex !important;
+                    align-items: center !important;
+                    justify-content: center !important;
                 }
-                /* Smooth touch scrolling */
+                /* Enlarge Model Selector pill comfortably without interfering with dropdown */
+                button[aria-haspopup="true"], [role="combobox"] {
+                    min-height: 36px !important;
+                    padding-left: 10px !important;
+                    padding-right: 10px !important;
+                }
+                /* Keep model picker and thinking effort menus at high z-index and unblocked */
+                [role="menu"], [role="listbox"], [role="dialog"], [data-radix-popper-content-wrapper] {
+                    z-index: 999999 !important;
+                }
                 * {
-                    -webkit-overflow-scrolling: touch !important;
+                    -webkit-overflow-scrolling: touch;
                 }
             `;
         })();
@@ -125,7 +126,6 @@ fun WebViewContainer(
         injectWebOptimizations(view, dark)
     }
 
-    // React to Web Theme change and reload cleanly
     LaunchedEffect(isWebDark) {
         webViewRef?.let {
             applyThemeSettings(it, isWebDark)
@@ -133,7 +133,6 @@ fun WebViewContainer(
         }
     }
 
-    // Apply Desktop / Mobile User-Agent
     fun applyDesktopMode(view: WebView, desktop: Boolean) {
         val settings = view.settings
         if (desktop) {
@@ -170,7 +169,6 @@ fun WebViewContainer(
                     ViewGroup.LayoutParams.MATCH_PARENT
                 )
 
-                // Assign isolated profile if supported on device
                 if (WebViewFeature.isFeatureSupported(WebViewFeature.MULTI_PROFILE)) {
                     try {
                         val profileName = "account_$accountId"
@@ -242,7 +240,6 @@ fun WebViewContainer(
 
                         view?.let { injectWebOptimizations(it, isWebDark) }
 
-                        // Auto-connect injection
                         if (autoConnect && finishedUrl != null && finishedUrl.contains("antigravity.google.com")) {
                             val jsAutoConnect = """
                             (function() {
@@ -295,7 +292,7 @@ fun WebViewContainer(
             }
         },
         update = {
-            // Recreated when key(accountId) changes
+            // Recreated on key(accountId)
         }
     )
 }

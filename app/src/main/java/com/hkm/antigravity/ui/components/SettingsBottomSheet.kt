@@ -2,8 +2,8 @@ package com.hkm.antigravity.ui.components
 
 import android.os.Build
 import android.widget.Toast
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -58,7 +58,7 @@ fun SettingsBottomSheet(
                 .fillMaxWidth()
                 .padding(horizontal = 20.dp)
                 .verticalScroll(rememberScrollState())
-                .padding(bottom = 36.dp)
+                .padding(bottom = 40.dp)
         ) {
             // Header
             Row(
@@ -75,7 +75,7 @@ fun SettingsBottomSheet(
                     Icon(
                         imageVector = Lucide.Settings,
                         contentDescription = "Settings",
-                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                        tint = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.size(22.dp)
                     )
                 }
@@ -112,7 +112,7 @@ fun SettingsBottomSheet(
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     Text(
-                        text = "Controls the theme of Antigravity web view directly",
+                        text = "Controls the theme of Antigravity web directly",
                         fontSize = 12.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(bottom = 12.dp)
@@ -128,11 +128,13 @@ fun SettingsBottomSheet(
                                     onUpdateWebTheme(key)
                                 },
                                 shape = SegmentedButtonDefaults.itemShape(index = index, count = webOptions.size),
-                                icon = {
-                                    SegmentedButtonDefaults.Icon(active = settings.webTheme == key)
-                                }
+                                colors = SegmentedButtonDefaults.colors(
+                                    activeContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                                    activeContentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    inactiveContentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
                             ) {
-                                Text(label, fontSize = 12.sp)
+                                Text(label, fontSize = 12.sp, fontWeight = if (settings.webTheme == key) FontWeight.Bold else FontWeight.Normal)
                             }
                         }
                     }
@@ -175,7 +177,7 @@ fun SettingsBottomSheet(
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     Text(
-                        text = "Theme for dialogs, settings and companion menus",
+                        text = "Theme for dialogs, menus and toolbars",
                         fontSize = 12.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(bottom = 12.dp)
@@ -191,11 +193,13 @@ fun SettingsBottomSheet(
                                     onUpdateThemeMode(key)
                                 },
                                 shape = SegmentedButtonDefaults.itemShape(index = index, count = appOptions.size),
-                                icon = {
-                                    SegmentedButtonDefaults.Icon(active = settings.themeMode == key)
-                                }
+                                colors = SegmentedButtonDefaults.colors(
+                                    activeContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                                    activeContentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    inactiveContentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
                             ) {
-                                Text(label, fontSize = 12.sp)
+                                Text(label, fontSize = 12.sp, fontWeight = if (settings.themeMode == key) FontWeight.Bold else FontWeight.Normal)
                             }
                         }
                     }
@@ -231,11 +235,13 @@ fun SettingsBottomSheet(
                                     onUpdatePillOrientation(key)
                                 },
                                 shape = SegmentedButtonDefaults.itemShape(index = index, count = orientations.size),
-                                icon = {
-                                    SegmentedButtonDefaults.Icon(active = settings.pillOrientation == key)
-                                }
+                                colors = SegmentedButtonDefaults.colors(
+                                    activeContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                                    activeContentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    inactiveContentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
                             ) {
-                                Text(label, fontSize = 12.sp)
+                                Text(label, fontSize = 12.sp, fontWeight = if (settings.pillOrientation == key) FontWeight.Bold else FontWeight.Normal)
                             }
                         }
                     }
@@ -259,11 +265,13 @@ fun SettingsBottomSheet(
                                     onUpdatePillScale(key)
                                 },
                                 shape = SegmentedButtonDefaults.itemShape(index = index, count = scales.size),
-                                icon = {
-                                    SegmentedButtonDefaults.Icon(active = settings.pillScale == key)
-                                }
+                                colors = SegmentedButtonDefaults.colors(
+                                    activeContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                                    activeContentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    inactiveContentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
                             ) {
-                                Text(label, fontSize = 12.sp)
+                                Text(label, fontSize = 12.sp, fontWeight = if (settings.pillScale == key) FontWeight.Bold else FontWeight.Normal)
                             }
                         }
                     }
@@ -398,7 +406,7 @@ fun SettingsBottomSheet(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Text(
-                    text = "v1.3.0 • Signed Release",
+                    text = "v1.3.1 • Signed Release",
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Medium,
                     color = MaterialTheme.colorScheme.primary
@@ -454,11 +462,7 @@ private fun SettingsRowSwitch(
         }
         Switch(
             checked = checked,
-            onCheckedChange = onCheckedChange,
-            colors = SwitchDefaults.colors(
-                checkedThumbColor = Color.White,
-                checkedTrackColor = MaterialTheme.colorScheme.primary
-            )
+            onCheckedChange = onCheckedChange
         )
     }
 }
@@ -483,16 +487,7 @@ private fun PillActionToggleRow(
         )
         Switch(
             checked = checked,
-            onCheckedChange = onCheckedChange,
-            modifier = Modifier.scale(0.85f),
-            colors = SwitchDefaults.colors(
-                checkedThumbColor = Color.White,
-                checkedTrackColor = MaterialTheme.colorScheme.primary
-            )
+            onCheckedChange = onCheckedChange
         )
     }
 }
-
-private fun Modifier.scale(scale: Float): Modifier = this.then(
-    Modifier.size((52 * scale).dp, (32 * scale).dp)
-)

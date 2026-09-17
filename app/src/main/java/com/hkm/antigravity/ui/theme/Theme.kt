@@ -12,27 +12,43 @@ import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 
 private val DarkColorScheme = darkColorScheme(
-    primary = AccentBlue,
-    secondary = AccentPurple,
-    background = BgDark,
-    surface = SurfaceDark,
-    surfaceVariant = SurfaceElevatedDark,
+    primary = Color(0xFF3882F6),
     onPrimary = Color.White,
+    primaryContainer = Color(0xFF1E3A8A),
+    onPrimaryContainer = Color(0xFFDBEAFE),
+    secondary = Color(0xFF8B5CF6),
     onSecondary = Color.White,
-    onBackground = TextPrimaryDark,
-    onSurface = TextPrimaryDark
+    background = Color(0xFF0C0E14),
+    onBackground = Color(0xFFF8FAFC),
+    surface = Color(0xFF121622),
+    onSurface = Color(0xFFF1F5F9),
+    surfaceVariant = Color(0xFF1E2434),
+    onSurfaceVariant = Color(0xFF94A3B8),
+    surfaceContainer = Color(0xFF161B26),
+    surfaceContainerLow = Color(0xFF131722),
+    surfaceContainerHigh = Color(0xFF1E2536),
+    outline = Color(0xFF475569),
+    outlineVariant = Color(0xFF283244)
 )
 
 private val LightColorScheme = lightColorScheme(
-    primary = AccentBlue,
-    secondary = AccentPurple,
-    background = BgLight,
-    surface = SurfaceLight,
-    surfaceVariant = SurfaceElevatedLight,
+    primary = Color(0xFF2563EB),
     onPrimary = Color.White,
+    primaryContainer = Color(0xFFDBEAFE),
+    onPrimaryContainer = Color(0xFF1E3A8A),
+    secondary = Color(0xFF8B5CF6),
     onSecondary = Color.White,
-    onBackground = TextPrimaryLight,
-    onSurface = TextPrimaryLight
+    background = Color(0xFFF8FAFC),
+    onBackground = Color(0xFF0F172A),
+    surface = Color(0xFFFFFFFF),
+    onSurface = Color(0xFF0F172A),
+    surfaceVariant = Color(0xFFF1F5F9),
+    onSurfaceVariant = Color(0xFF475569),
+    surfaceContainer = Color(0xFFF8FAFC),
+    surfaceContainerLow = Color(0xFFFFFFFF),
+    surfaceContainerHigh = Color(0xFFE2E8F0),
+    outline = Color(0xFF94A3B8),
+    outlineVariant = Color(0xFFE2E8F0)
 )
 
 @Composable

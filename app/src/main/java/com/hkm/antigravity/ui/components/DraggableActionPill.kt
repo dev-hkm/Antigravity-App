@@ -56,24 +56,24 @@ fun DraggableActionPill(
     val screenWidthPx = with(density) { configuration.screenWidthDp.dp.toPx() }
     val screenHeightPx = with(density) { configuration.screenHeightDp.dp.toPx() }
 
-    // Dimensions based on scale
     val (iconSize, btnSize, padH, padV) = when (scale) {
-        "compact" -> listOf(16.dp, 26.dp, 6.dp, 4.dp)
+        "compact" -> listOf(15.dp, 26.dp, 6.dp, 4.dp)
         "large" -> listOf(20.dp, 36.dp, 10.dp, 6.dp)
         else -> listOf(18.dp, 30.dp, 8.dp, 5.dp) // standard
     }
 
-    var offsetX by remember { mutableFloatStateOf(screenWidthPx - with(density) { 180.dp.toPx() }) }
-    var offsetY by remember { mutableFloatStateOf(with(density) { 60.dp.toPx() }) }
+    val isVertical = orientation == "vertical"
+
+    // Default placement near upper-right corner
+    var offsetX by remember { mutableFloatStateOf(screenWidthPx - with(density) { (if (isVertical) 60.dp else 190.dp).toPx() }) }
+    var offsetY by remember { mutableFloatStateOf(with(density) { 65.dp.toPx() }) }
     var isDragging by remember { mutableStateOf(false) }
 
     val pillAlpha by animateFloatAsState(
-        targetValue = if (isDragging) 1.0f else 0.88f,
+        targetValue = if (isDragging) 1.0f else 0.90f,
         animationSpec = spring(stiffness = Spring.StiffnessLow),
         label = "pillAlpha"
     )
-
-    val isVertical = orientation == "vertical"
 
     Box(
         modifier = modifier
@@ -87,15 +87,16 @@ fun DraggableActionPill(
                     onDragEnd = {
                         isDragging = false
                         haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                        // Snap smoothly towards the nearest side
-                        val safeMargin = with(density) { 12.dp.toPx() }
+                        // Stays exactly where user drops it, only gently clamp inside screen bounds
+                        val pillW = with(density) { (if (isVertical) 52.dp else 190.dp).toPx() }
+                        val pillH = with(density) { (if (isVertical) 190.dp else 44.dp).toPx() }
+                        val safeMargin = with(density) { 8.dp.toPx() }
                         val minX = safeMargin
-                        val maxX = screenWidthPx - with(density) { (if (isVertical) 56.dp else 190.dp).toPx() } - safeMargin
+                        val maxX = (screenWidthPx - pillW - safeMargin).coerceAtLeast(minX)
+                        val minY = with(density) { 36.dp.toPx() }
+                        val maxY = (screenHeightPx - pillH - with(density) { 60.dp.toPx() }).coerceAtLeast(minY)
 
-                        offsetX = if (offsetX < screenWidthPx / 2) minX else maxX
-
-                        val minY = with(density) { 48.dp.toPx() }
-                        val maxY = screenHeightPx - with(density) { 120.dp.toPx() }
+                        offsetX = offsetX.coerceIn(minX, maxX)
                         offsetY = offsetY.coerceIn(minY, maxY)
                     },
                     onDragCancel = {
@@ -103,8 +104,8 @@ fun DraggableActionPill(
                     },
                     onDrag = { change, dragAmount ->
                         change.consume()
-                        offsetX = (offsetX + dragAmount.x).coerceIn(0f, screenWidthPx - with(density) { 60.dp.toPx() })
-                        offsetY = (offsetY + dragAmount.y).coerceIn(with(density) { 30.dp.toPx() }, screenHeightPx - with(density) { 80.dp.toPx() })
+                        offsetX += dragAmount.x
+                        offsetY += dragAmount.y
                     }
                 )
             }
@@ -115,10 +116,10 @@ fun DraggableActionPill(
                 spotColor = Color.Black.copy(alpha = 0.35f)
             )
             .clip(RoundedCornerShape(24.dp))
-            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.94f))
+            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.95f))
             .border(
                 width = 1.dp,
-                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f),
+                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f),
                 shape = RoundedCornerShape(24.dp)
             )
             .padding(horizontal = padH, vertical = padV)
@@ -128,10 +129,9 @@ fun DraggableActionPill(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                // Drag handle
                 Icon(
                     imageVector = Lucide.DragHandle,
-                    contentDescription = "Drag",
+                    contentDescription = "Drag Handle",
                     tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
                     modifier = Modifier.size(14.dp)
                 )
@@ -157,10 +157,9 @@ fun DraggableActionPill(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                // Drag handle
                 Icon(
                     imageVector = Lucide.DragHandle,
-                    contentDescription = "Drag",
+                    contentDescription = "Drag Handle",
                     tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
                     modifier = Modifier.size(14.dp)
                 )
