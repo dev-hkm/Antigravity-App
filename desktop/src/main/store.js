@@ -16,13 +16,13 @@ class SimpleStore {
           id: 'acc_default_1',
           name: 'Primary Account',
           color: '#3b82f6',
-          url: 'https://antigravity.google',
+          url: 'https://antigravity.google/remote',
           createdAt: Date.now()
         }
       ],
       activeAccountId: 'acc_default_1',
       settings: {
-        defaultUrl: 'https://antigravity.google',
+        defaultUrl: 'https://antigravity.google/remote',
         showNavBar: true,
         zenMode: false,
         hardwareAcceleration: true

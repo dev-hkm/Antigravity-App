@@ -1,10 +1,18 @@
 package com.hkm.antigravity.ui.screens
 
+import android.app.Activity
+import android.content.Intent
+import android.net.Uri
+import android.webkit.ValueCallback
+import android.webkit.WebChromeClient
 import android.webkit.WebView
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -21,10 +29,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.hkm.antigravity.R
 import com.hkm.antigravity.data.model.Account
 import com.hkm.antigravity.data.repository.AccountRepository
 import com.hkm.antigravity.ui.components.AccountBottomSheet
@@ -42,13 +52,35 @@ fun MainScreen(
     val activeAccount by repository.activeAccountFlow.collectAsState()
 
     var webViewInstance by remember { mutableStateOf<WebView?>(null) }
-    var currentUrl by remember { mutableStateOf(activeAccount?.url ?: "https://antigravity.google") }
+    var currentUrl by remember { mutableStateOf(activeAccount?.url ?: AccountRepository.DEFAULT_REMOTE_URL) }
     var pageProgress by remember { mutableIntStateOf(0) }
     var isZenMode by remember { mutableStateOf(false) }
 
     var showAccountSheet by remember { mutableStateOf(false) }
     var showAccountDialog by remember { mutableStateOf(false) }
     var accountToEdit by remember { mutableStateOf<Account?>(null) }
+
+    // File / Media Chooser Support
+    var filePathCallback by remember { mutableStateOf<ValueCallback<Array<Uri>>?>(null) }
+
+    val filePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        val uris: Array<Uri>? = if (result.resultCode == Activity.RESULT_OK) {
+            val data = result.data
+            when {
+                data?.clipData != null -> {
+                    val count = data.clipData!!.itemCount
+                    Array(count) { i -> data.clipData!!.getItemAt(i).uri }
+                }
+                data?.data != null -> arrayOf(data.data!!)
+                else -> null
+            }
+        } else null
+
+        filePathCallback?.onReceiveValue(uris)
+        filePathCallback = null
+    }
 
     // Intercept back button to navigate webview history
     BackHandler {
@@ -70,6 +102,7 @@ fun MainScreen(
     Scaffold(
         modifier = Modifier.fillMaxSize(),
         containerColor = BgDark,
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             if (!isZenMode) {
                 Column(
@@ -86,23 +119,21 @@ fun MainScreen(
                             .padding(horizontal = 12.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        // Brand Icon & Title
+                        // Official Brand Icon & Title
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier.clickable {
-                                webViewInstance?.loadUrl(activeAccount?.url ?: "https://antigravity.google")
+                                webViewInstance?.loadUrl(activeAccount?.url ?: AccountRepository.DEFAULT_REMOTE_URL)
                             }
                         ) {
-                            Box(
+                            Image(
+                                painter = painterResource(id = R.drawable.antigravity_logo),
+                                contentDescription = "Antigravity",
                                 modifier = Modifier
-                                    .size(28.dp)
+                                    .size(30.dp)
                                     .clip(CircleShape)
-                                    .background(AccentBlue.copy(alpha = 0.2f)),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text("A", fontWeight = FontWeight.Bold, color = AccentBlue, fontSize = 16.sp)
-                            }
-                            Spacer(modifier = Modifier.width(8.dp))
+                            )
+                            Spacer(modifier = Modifier.width(10.dp))
                             Text(
                                 text = "Antigravity",
                                 fontWeight = FontWeight.Bold,
@@ -131,7 +162,7 @@ fun MainScreen(
                             )
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = activeAccount?.name ?: "Accounts",
+                                text = activeAccount?.name ?: "Account",
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 color = TextPrimary,
@@ -156,7 +187,7 @@ fun MainScreen(
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Fullscreen,
-                                contentDescription = "Zen Mode",
+                                contentDescription = "Fullscreen",
                                 tint = TextSecondary,
                                 modifier = Modifier.size(20.dp)
                             )
@@ -198,10 +229,7 @@ fun MainScreen(
                         }
 
                         IconButton(
-                            onClick = {
-                                activeAccount?.let { repository.saveCurrentAccountCookies(currentUrl) }
-                                webViewInstance?.reload()
-                            },
+                            onClick = { webViewInstance?.reload() },
                             modifier = Modifier.size(32.dp)
                         ) {
                             Icon(
@@ -264,21 +292,40 @@ fun MainScreen(
                 .padding(innerPadding)
                 .background(BgDark)
         ) {
-            // Main Web View
+            val accountId = activeAccount?.id ?: "acc_primary"
+            val targetUrl = activeAccount?.url ?: AccountRepository.DEFAULT_REMOTE_URL
+
+            // Main Web View with multi-profile and file choosing support
             WebViewContainer(
-                modifier = Modifier.fillMaxSize(),
-                url = activeAccount?.url ?: "https://antigravity.google",
+                modifier = Modifier
+                    .fillMaxSize()
+                    .navigationBarsPadding(),
+                accountId = accountId,
+                url = targetUrl,
                 onWebViewCreated = { webView ->
                     webViewInstance = webView
-                    activeAccount?.let { acc ->
-                        repository.applyAccountCookies(acc, acc.url)
-                    }
                 },
                 onProgressChange = { pageProgress = it },
                 onTitleChange = { /* Title update */ },
                 onUrlChange = { url ->
                     currentUrl = url
-                    activeAccount?.let { repository.saveCurrentAccountCookies(url) }
+                },
+                onShowFileChooser = { callback, params ->
+                    filePathCallback?.onReceiveValue(null)
+                    filePathCallback = callback
+
+                    val intent = params?.createIntent() ?: Intent(Intent.ACTION_GET_CONTENT).apply {
+                        type = "*/*"
+                        putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
+                    }
+                    try {
+                        filePickerLauncher.launch(intent)
+                        true
+                    } catch (e: Exception) {
+                        filePathCallback?.onReceiveValue(null)
+                        filePathCallback = null
+                        false
+                    }
                 }
             )
 
@@ -301,7 +348,7 @@ fun MainScreen(
                 ) {
                     Icon(
                         imageVector = Icons.Default.FullscreenExit,
-                        contentDescription = "Exit Zen Mode",
+                        contentDescription = "Exit Fullscreen",
                         tint = TextPrimary,
                         modifier = Modifier.size(20.dp)
                     )
@@ -317,7 +364,7 @@ fun MainScreen(
             activeAccount = activeAccount,
             onDismiss = { showAccountSheet = false },
             onSelectAccount = { target ->
-                val newAcc = repository.switchAccount(target.id, currentUrl)
+                val newAcc = repository.switchAccount(target.id)
                 if (newAcc != null) {
                     webViewInstance?.loadUrl(newAcc.url)
                 }

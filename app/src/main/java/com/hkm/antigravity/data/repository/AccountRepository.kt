@@ -36,10 +36,10 @@ class AccountRepository(private val context: Context) {
 
         if (list.isEmpty()) {
             val defaultAcc = Account(
-                id = "acc_" + System.currentTimeMillis(),
+                id = "acc_primary",
                 name = "Primary Account",
                 colorHex = "#3b82f6",
-                url = "https://antigravity.google"
+                url = DEFAULT_REMOTE_URL
             )
             list.add(defaultAcc)
             saveAccountsList(list)
@@ -61,54 +61,11 @@ class AccountRepository(private val context: Context) {
 
     fun getAccounts(): List<Account> = _accountsFlow.value
 
-    fun saveCurrentAccountCookies(url: String) {
-        val current = _activeAccountFlow.value ?: return
-        val cookieManager = CookieManager.getInstance()
-        val cookies = cookieManager.getCookie(url) ?: ""
-        updateAccountCookies(current.id, cookies)
-    }
-
-    private fun updateAccountCookies(accountId: String, cookies: String) {
-        val currentList = _accountsFlow.value.toMutableList()
-        val index = currentList.indexOfFirst { it.id == accountId }
-        if (index != -1) {
-            val updated = currentList[index].copy(cookies = cookies)
-            currentList[index] = updated
-            _accountsFlow.value = currentList
-            if (_activeAccountFlow.value?.id == accountId) {
-                _activeAccountFlow.value = updated
-            }
-            saveAccountsList(currentList)
-        }
-    }
-
-    fun applyAccountCookies(account: Account, targetUrl: String) {
-        val cookieManager = CookieManager.getInstance()
-        cookieManager.setAcceptCookie(true)
-
-        // Clear existing cookies to avoid cross-account contamination
-        cookieManager.removeAllCookies {
-            if (account.cookies.isNotEmpty()) {
-                val parts = account.cookies.split(";")
-                for (part in parts) {
-                    val trimmed = part.trim()
-                    if (trimmed.isNotEmpty()) {
-                        cookieManager.setCookie(targetUrl, trimmed)
-                    }
-                }
-            }
-            cookieManager.flush()
-        }
-    }
-
-    fun switchAccount(accountId: String, currentUrl: String): Account? {
-        saveCurrentAccountCookies(currentUrl)
-
+    fun switchAccount(accountId: String): Account? {
         val target = _accountsFlow.value.find { it.id == accountId } ?: return null
         prefs.edit().putString(KEY_ACTIVE_ID, target.id).apply()
         _activeAccountFlow.value = target
-
-        applyAccountCookies(target, target.url)
+        CookieManager.getInstance().flush()
         return target
     }
 
@@ -117,14 +74,14 @@ class AccountRepository(private val context: Context) {
             id = "acc_" + System.currentTimeMillis(),
             name = name.ifBlank { "Account " + (_accountsFlow.value.size + 1) },
             colorHex = colorHex.ifBlank { "#6366f1" },
-            url = url.ifBlank { "https://antigravity.google" }
+            url = url.ifBlank { DEFAULT_REMOTE_URL }
         )
 
         val updated = _accountsFlow.value.toMutableList().apply { add(newAcc) }
         _accountsFlow.value = updated
         saveAccountsList(updated)
 
-        switchAccount(newAcc.id, _activeAccountFlow.value?.url ?: newAcc.url)
+        switchAccount(newAcc.id)
         return newAcc
     }
 
@@ -162,7 +119,6 @@ class AccountRepository(private val context: Context) {
                 val nextActive = currentList.first()
                 _activeAccountFlow.value = nextActive
                 prefs.edit().putString(KEY_ACTIVE_ID, nextActive.id).apply()
-                applyAccountCookies(nextActive, nextActive.url)
             }
             return true
         }
@@ -170,6 +126,7 @@ class AccountRepository(private val context: Context) {
     }
 
     companion object {
+        const val DEFAULT_REMOTE_URL = "https://antigravity.google/remote"
         private const val KEY_ACCOUNTS = "key_accounts_json"
         private const val KEY_ACTIVE_ID = "key_active_account_id"
     }

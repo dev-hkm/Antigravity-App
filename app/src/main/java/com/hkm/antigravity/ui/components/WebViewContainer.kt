@@ -2,21 +2,27 @@ package com.hkm.antigravity.ui.components
 
 import android.annotation.SuppressLint
 import android.graphics.Bitmap
+import android.net.Uri
 import android.view.ViewGroup
 import android.webkit.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.webkit.ProfileStore
+import androidx.webkit.WebViewCompat
+import androidx.webkit.WebViewFeature
 
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
 fun WebViewContainer(
     modifier: Modifier = Modifier,
+    accountId: String,
     url: String,
     onWebViewCreated: (WebView) -> Unit,
     onProgressChange: (Int) -> Unit,
     onTitleChange: (String) -> Unit,
-    onUrlChange: (String) -> Unit
+    onUrlChange: (String) -> Unit,
+    onShowFileChooser: (ValueCallback<Array<Uri>>?, WebChromeClient.FileChooserParams?) -> Boolean
 ) {
     AndroidView(
         modifier = modifier,
@@ -27,9 +33,21 @@ fun WebViewContainer(
                     ViewGroup.LayoutParams.MATCH_PARENT
                 )
 
+                // Assign isolated profile if supported on device
+                if (WebViewFeature.isFeatureSupported(WebViewFeature.MULTI_PROFILE)) {
+                    try {
+                        val profileName = "account_$accountId"
+                        ProfileStore.getInstance().getOrCreateProfile(profileName)
+                        WebViewCompat.setProfile(this, profileName)
+                    } catch (e: Exception) {
+                        // Fallback to default profile
+                    }
+                }
+
                 settings.apply {
                     javaScriptEnabled = true
                     domStorageEnabled = true
+                    @Suppress("DEPRECATION")
                     databaseEnabled = true
                     useWideViewPort = true
                     loadWithOverviewMode = true
@@ -40,15 +58,16 @@ fun WebViewContainer(
                     allowFileAccess = true
                     allowContentAccess = true
                     mediaPlaybackRequiresUserGesture = false
+                    setGeolocationEnabled(true)
 
-                    // Remove Android WebView identifiers from UA to allow Google OAuth login
+                    // Modern desktop/mobile clean UA to allow seamless Google authentication
                     val defaultUA = userAgentString
                     userAgentString = defaultUA
                         .replace("; wv", "")
                         .replace("Version/4.0 ", "")
                 }
 
-                // Cookie manager setup
+                // Cookie manager configuration
                 val cookieManager = CookieManager.getInstance()
                 cookieManager.setAcceptCookie(true)
                 cookieManager.setAcceptThirdPartyCookies(this, true)
@@ -62,6 +81,14 @@ fun WebViewContainer(
                         if (!title.isNullOrEmpty()) {
                             onTitleChange(title)
                         }
+                    }
+
+                    override fun onShowFileChooser(
+                        webView: WebView?,
+                        filePathCallback: ValueCallback<Array<Uri>>?,
+                        fileChooserParams: FileChooserParams?
+                    ): Boolean {
+                        return onShowFileChooser(filePathCallback, fileChooserParams)
                     }
                 }
 
@@ -77,13 +104,14 @@ fun WebViewContainer(
                             onUrlChange(url)
                         }
                         onProgressChange(100)
+                        CookieManager.getInstance().flush()
                     }
 
                     override fun shouldOverrideUrlLoading(
                         view: WebView?,
                         request: WebResourceRequest?
                     ): Boolean {
-                        return false // Load all inside webview
+                        return false // Keep browsing inside WebView
                     }
                 }
 
@@ -92,10 +120,15 @@ fun WebViewContainer(
             }
         },
         update = { webView ->
-            // If url changed from external switch, load it
-            val current = webView.url ?: ""
-            if (url.isNotEmpty() && !current.startsWith(url) && !url.startsWith(current)) {
-                webView.loadUrl(url)
+            // Reassign profile if account changed and supported
+            if (WebViewFeature.isFeatureSupported(WebViewFeature.MULTI_PROFILE)) {
+                try {
+                    val profileName = "account_$accountId"
+                    ProfileStore.getInstance().getOrCreateProfile(profileName)
+                    WebViewCompat.setProfile(webView, profileName)
+                } catch (e: Exception) {
+                    // Ignored
+                }
             }
         }
     )

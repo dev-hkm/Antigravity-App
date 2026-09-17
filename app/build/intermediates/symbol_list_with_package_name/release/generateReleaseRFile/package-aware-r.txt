@@ -6,9 +6,9 @@ color purple_700
 color teal_200
 color teal_700
 color white
+drawable antigravity_logo
 drawable ic_launcher_background
 drawable ic_launcher_foreground
-drawable once_logo_mark
 font jetbrains_mono_medium
 font merriweather_bold
 font merriweather_regular

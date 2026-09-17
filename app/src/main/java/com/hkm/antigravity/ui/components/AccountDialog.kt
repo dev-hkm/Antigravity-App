@@ -31,7 +31,7 @@ fun AccountDialog(
     onDelete: () -> Unit = {}
 ) {
     var name by remember { mutableStateOf(accountToEdit?.name ?: "") }
-    var url by remember { mutableStateOf(accountToEdit?.url ?: "https://antigravity.google") }
+    var url by remember { mutableStateOf(accountToEdit?.url ?: "https://antigravity.google/remote") }
     var selectedColor by remember { mutableStateOf(accountToEdit?.colorHex ?: "#3b82f6") }
 
     AlertDialog(

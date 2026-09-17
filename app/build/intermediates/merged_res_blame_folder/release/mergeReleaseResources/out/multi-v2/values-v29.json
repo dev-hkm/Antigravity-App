@@ -1,0 +1,20 @@
+{
+    "logs": [
+        {
+            "outputFile": "com.hkm.antigravity.app-mergeReleaseResources-1:/values-v29/values-v29.xml",
+            "map": [
+                {
+                    "source": "C:\\AppWedProjects\\Antigravity App\\app\\src\\main\\res\\values-v29\\themes.xml",
+                    "from": {
+                        "startLines": "2",
+                        "startColumns": "4",
+                        "startOffsets": "55",
+                        "endLines": "8",
+                        "endColumns": "12",
+                        "endOffsets": "515"
+                    }
+                }
+            ]
+        }
+    ]
+}

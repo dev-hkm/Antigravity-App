@@ -9,7 +9,8 @@
     <color name="white">#FFFFFFFF</color>
     <string name="app_name">Antigravity</string>
     <style name="Theme.Antigravity" parent="android:Theme.Material.NoActionBar">
-        <item name="android:statusBarColor">#0c0e14</item>
-        <item name="android:navigationBarColor">#08090d</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowDrawsSystemBarBackgrounds">true</item>
     </style>
 </resources>
