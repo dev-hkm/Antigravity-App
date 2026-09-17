@@ -118,51 +118,47 @@ fun WebViewContainer(
             if (!window.__antiMobileSetup) {
                 window.__antiMobileSetup = true;
 
-                // Count all open popover layers at any moment
-                function countMenuLayers() {
-                    return document.querySelectorAll('[data-radix-popper-content-wrapper], [role="menu"]').length;
+                function radixPopperCount() {
+                    return document.querySelectorAll('[data-radix-popper-content-wrapper]').length;
                 }
 
-                var layersBeforeTouch = 0;
+                // Intercept at pointerdown (capture phase) - before Radix sees it.
+                // Radix uses onPointerDown to register clicks; blocking here prevents
+                // the model from being selected before the effort submenu can open.
+                document.addEventListener('pointerdown', function(e) {
+                    if (e.pointerType !== 'touch') return;
 
-                document.addEventListener('touchstart', function(e) {
-                    var item = e.target.closest('[role="menuitem"], [role="option"], li');
-                    if (!item) return;
-
-                    // Snapshot how many menus are open RIGHT NOW (before hover)
-                    layersBeforeTouch = countMenuLayers();
-
-                    // Synthesize hover so Radix opens the effort submenu
-                    item.dispatchEvent(new MouseEvent('pointerover', {bubbles:true, cancelable:true}));
-                    item.dispatchEvent(new MouseEvent('mouseenter', {bubbles:true, cancelable:true}));
-                    item.dispatchEvent(new MouseEvent('mouseover',  {bubbles:true, cancelable:true}));
-                    item.dispatchEvent(new MouseEvent('mousemove',  {bubbles:true, cancelable:true}));
-                }, {passive: true, capture: true});
-
-                document.addEventListener('touchend', function(e) {
                     var item = e.target.closest('[role="menuitem"], [role="option"]');
                     if (!item) return;
 
-                    // After the hover events above, check if a NEW menu layer appeared
-                    var layersNow = countMenuLayers();
-                    if (layersNow > layersBeforeTouch) {
-                        // A submenu (effort picker) just opened — block this touch→click
-                        // so user can now tap the effort option without menu closing
-                        e.preventDefault();
-                        e.stopPropagation();
-                    }
+                    var poppers = radixPopperCount();
+
+                    // If 2+ poppers: the effort submenu is already open.
+                    // User is tapping an effort item -> let it through normally.
+                    if (poppers >= 2) return;
+
+                    // If 0 poppers: no menu open at all -> let through.
+                    if (poppers === 0) return;
+
+                    // Exactly 1 popper: the model list is open and user just tapped a model.
+                    // Block Radix from seeing this as a click, then fire hover to open effort submenu.
+                    e.preventDefault();
+                    e.stopPropagation();
+
+                    // Synthesize full pointer+mouse hover chain
+                    ['pointerover', 'pointerenter', 'mouseenter', 'mouseover', 'mousemove'].forEach(function(t) {
+                        try { item.dispatchEvent(new PointerEvent(t, {bubbles:true, cancelable:true, isPrimary:true})); }
+                        catch(ex) { item.dispatchEvent(new MouseEvent(t, {bubbles:true, cancelable:true})); }
+                    });
+
+                    // Fallback: if no effort submenu appears after 400ms, click the model directly
+                    var target = item;
+                    setTimeout(function() {
+                        if (radixPopperCount() <= 1) {
+                            target.click();
+                        }
+                    }, 400);
                 }, {passive: false, capture: true});
-
-                // Also intercept the synthetic click that fires after touchend
-                document.addEventListener('click', function(e) {
-                    var item = e.target.closest('[role="menuitem"], [role="option"]');
-                    if (!item) return;
-                    var layersNow = countMenuLayers();
-                    if (layersNow > layersBeforeTouch) {
-                        e.preventDefault();
-                        e.stopPropagation();
-                    }
-                }, {capture: true});
             }
         })();
         """.trimIndent()
