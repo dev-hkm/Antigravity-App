@@ -128,13 +128,7 @@ fun SettingsBottomSheet(
                                     haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                     onUpdateWebTheme(key)
                                 },
-                                shape = SegmentedButtonDefaults.itemShape(index = index, count = webOptions.size),
-                                colors = SegmentedButtonDefaults.colors(
-                                    activeContainerColor = AccentBlue,
-                                    activeContentColor = Color.White,
-                                    inactiveContainerColor = Color.Transparent,
-                                    inactiveContentColor = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
+                                shape = SegmentedButtonDefaults.itemShape(index = index, count = webOptions.size)
                             ) {
                                 Text(label, fontSize = 12.sp, fontWeight = if (settings.webTheme == key) FontWeight.Bold else FontWeight.Normal)
                             }
@@ -194,13 +188,7 @@ fun SettingsBottomSheet(
                                     haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                     onUpdateThemeMode(key)
                                 },
-                                shape = SegmentedButtonDefaults.itemShape(index = index, count = appOptions.size),
-                                colors = SegmentedButtonDefaults.colors(
-                                    activeContainerColor = AccentBlue,
-                                    activeContentColor = Color.White,
-                                    inactiveContainerColor = Color.Transparent,
-                                    inactiveContentColor = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
+                                shape = SegmentedButtonDefaults.itemShape(index = index, count = appOptions.size)
                             ) {
                                 Text(label, fontSize = 12.sp, fontWeight = if (settings.themeMode == key) FontWeight.Bold else FontWeight.Normal)
                             }
@@ -237,13 +225,7 @@ fun SettingsBottomSheet(
                                     haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                     onUpdatePillOrientation(key)
                                 },
-                                shape = SegmentedButtonDefaults.itemShape(index = index, count = orientations.size),
-                                colors = SegmentedButtonDefaults.colors(
-                                    activeContainerColor = AccentBlue,
-                                    activeContentColor = Color.White,
-                                    inactiveContainerColor = Color.Transparent,
-                                    inactiveContentColor = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
+                                shape = SegmentedButtonDefaults.itemShape(index = index, count = orientations.size)
                             ) {
                                 Text(label, fontSize = 12.sp, fontWeight = if (settings.pillOrientation == key) FontWeight.Bold else FontWeight.Normal)
                             }
@@ -268,13 +250,7 @@ fun SettingsBottomSheet(
                                     haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                     onUpdatePillScale(key)
                                 },
-                                shape = SegmentedButtonDefaults.itemShape(index = index, count = scales.size),
-                                colors = SegmentedButtonDefaults.colors(
-                                    activeContainerColor = AccentBlue,
-                                    activeContentColor = Color.White,
-                                    inactiveContainerColor = Color.Transparent,
-                                    inactiveContentColor = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
+                                shape = SegmentedButtonDefaults.itemShape(index = index, count = scales.size)
                             ) {
                                 Text(label, fontSize = 12.sp, fontWeight = if (settings.pillScale == key) FontWeight.Bold else FontWeight.Normal)
                             }
@@ -411,7 +387,7 @@ fun SettingsBottomSheet(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Text(
-                    text = "v1.3.2 • Signed Release",
+                    text = "v1.3.3 • Signed Release",
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Medium,
                     color = AccentBlue
@@ -467,14 +443,7 @@ private fun SettingsRowSwitch(
         }
         Switch(
             checked = checked,
-            onCheckedChange = onCheckedChange,
-            colors = SwitchDefaults.colors(
-                checkedThumbColor = Color.White,
-                checkedTrackColor = AccentBlue,
-                uncheckedThumbColor = Color(0xFF94A3B8),
-                uncheckedTrackColor = Color(0xFF1E2434),
-                uncheckedBorderColor = Color(0xFF475569)
-            )
+            onCheckedChange = onCheckedChange
         )
     }
 }
@@ -499,14 +468,7 @@ private fun PillActionToggleRow(
         )
         Switch(
             checked = checked,
-            onCheckedChange = onCheckedChange,
-            colors = SwitchDefaults.colors(
-                checkedThumbColor = Color.White,
-                checkedTrackColor = AccentBlue,
-                uncheckedThumbColor = Color(0xFF94A3B8),
-                uncheckedTrackColor = Color(0xFF1E2434),
-                uncheckedBorderColor = Color(0xFF475569)
-            )
+            onCheckedChange = onCheckedChange
         )
     }
 }

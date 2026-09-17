@@ -45,7 +45,16 @@ fun WebViewContainer(
         }
     }
 
+    
+    val currentIsWebDark by rememberUpdatedState(isWebDark)
+    val currentAutoConnect by rememberUpdatedState(autoConnect)
+    val currentOnUrlChange by rememberUpdatedState(onUrlChange)
+    val currentOnProgressChange by rememberUpdatedState(onProgressChange)
+    val currentOnTitleChange by rememberUpdatedState(onTitleChange)
+    val currentOnShowFileChooser by rememberUpdatedState(onShowFileChooser)
+    
     var webViewRef by remember { mutableStateOf<WebView?>(null) }
+
 
     fun injectWebOptimizations(view: WebView, dark: Boolean) {
         val bg = if (dark) "#0C0E14" else "#FFFFFF"
@@ -123,6 +132,7 @@ fun WebViewContainer(
                 }
             `;
 
+            
             // 5. Synthesize mouse hover for Model Picker on mobile so Thinking Effort submenu expands
             if (!window.__antiTouchHoverSetup) {
                 window.__antiTouchHoverSetup = true;
@@ -131,6 +141,21 @@ fun WebViewContainer(
                     if (item && item.closest('[role="menu"], [role="listbox"], [data-radix-popper-content-wrapper]')) {
                         var enterEvent = new MouseEvent('mouseenter', { bubbles: true, cancelable: true });
                         var overEvent = new MouseEvent('mouseover', { bubbles: true, cancelable: true });
+                        item.dispatchEvent(enterEvent);
+                        item.dispatchEvent(overEvent);
+                    }
+                }, { passive: true, capture: true });
+                
+                // Intercept click to prevent closing if it has a submenu
+                document.addEventListener('click', function(e) {
+                    var item = e.target.closest('[role="menuitem"], [role="option"]');
+                    if (item && (item.hasAttribute('aria-haspopup') || item.getAttribute('aria-expanded') === 'false' || item.querySelector('[role="menu"]'))) {
+                        e.stopPropagation();
+                        e.preventDefault();
+                    }
+                }, { capture: true });
+            }
+);
                         item.dispatchEvent(enterEvent);
                         item.dispatchEvent(overEvent);
                     }
@@ -231,7 +256,7 @@ fun WebViewContainer(
                     setGeolocationEnabled(true)
                 }
 
-                applyThemeSettings(this, isWebDark)
+                applyThemeSettings(this, currentIsWebDark)
                 applyDesktopMode(this, isDesktopMode)
 
                 val cookieManager = CookieManager.getInstance()
@@ -240,12 +265,12 @@ fun WebViewContainer(
 
                 webChromeClient = object : WebChromeClient() {
                     override fun onProgressChanged(view: WebView?, newProgress: Int) {
-                        onProgressChange(newProgress)
+                        currentOnProgressChange(newProgress)
                     }
 
                     override fun onReceivedTitle(view: WebView?, title: String?) {
                         if (!title.isNullOrEmpty()) {
-                            onTitleChange(title)
+                            currentOnTitleChange(title)
                         }
                     }
 
@@ -254,28 +279,28 @@ fun WebViewContainer(
                         filePathCallback: ValueCallback<Array<Uri>>?,
                         fileChooserParams: FileChooserParams?
                     ): Boolean {
-                        return onShowFileChooser(filePathCallback, fileChooserParams)
+                        return currentOnShowFileChooser(filePathCallback, fileChooserParams)
                     }
                 }
 
                 webViewClient = object : WebViewClient() {
                     override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
                         if (!url.isNullOrEmpty()) {
-                            onUrlChange(url)
+                            currentOnUrlChange(url)
                         }
-                        view?.let { injectWebOptimizations(it, isWebDark) }
+                        view?.let { injectWebOptimizations(it, currentIsWebDark) }
                     }
 
                     override fun onPageFinished(view: WebView?, finishedUrl: String?) {
                         if (!finishedUrl.isNullOrEmpty()) {
-                            onUrlChange(finishedUrl)
+                            currentOnUrlChange(finishedUrl)
                         }
-                        onProgressChange(100)
+                        currentOnProgressChange(100)
                         CookieManager.getInstance().flush()
 
-                        view?.let { injectWebOptimizations(it, isWebDark) }
+                        view?.let { injectWebOptimizations(it, currentIsWebDark) }
 
-                        if (autoConnect && finishedUrl != null && finishedUrl.contains("antigravity.google.com")) {
+                        if (currentAutoConnect && finishedUrl != null && finishedUrl.contains("antigravity.google.com")) {
                             val jsAutoConnect = """
                             (function() {
                                 if (window.__antiAutoConnected) return;

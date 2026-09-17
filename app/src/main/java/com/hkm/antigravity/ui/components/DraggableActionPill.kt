@@ -75,7 +75,16 @@ fun DraggableActionPill(
     // Initial position
     var offsetX by remember { mutableFloatStateOf(maxX - with(density) { 10.dp.toPx() }) }
     var offsetY by remember { mutableFloatStateOf(with(density) { 70.dp.toPx() }) }
+    
     var isDragging by remember { mutableStateOf(false) }
+
+    LaunchedEffect(minX, maxX, minY, maxY) {
+        if (offsetX > maxX) offsetX = maxX
+        if (offsetX < minX) offsetX = minX
+        if (offsetY > maxY) offsetY = maxY
+        if (offsetY < minY) offsetY = minY
+    }
+
 
     val pillAlpha by animateFloatAsState(
         targetValue = if (isDragging) 1.0f else 0.90f,
