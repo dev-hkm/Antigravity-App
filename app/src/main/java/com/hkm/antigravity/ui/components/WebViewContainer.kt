@@ -25,7 +25,7 @@ fun WebViewContainer(
     accountId: String,
     url: String,
     appThemeMode: String = "system",
-    webTheme: String = "dark", // "dark", "light", "follow_app"
+    webTheme: String = "dark",
     isDesktopMode: Boolean = false,
     autoConnect: Boolean = true,
     onWebViewCreated: (WebView) -> Unit,
@@ -45,30 +45,27 @@ fun WebViewContainer(
         }
     }
 
-    
     val currentIsWebDark by rememberUpdatedState(isWebDark)
     val currentAutoConnect by rememberUpdatedState(autoConnect)
     val currentOnUrlChange by rememberUpdatedState(onUrlChange)
     val currentOnProgressChange by rememberUpdatedState(onProgressChange)
     val currentOnTitleChange by rememberUpdatedState(onTitleChange)
     val currentOnShowFileChooser by rememberUpdatedState(onShowFileChooser)
-    
+
     var webViewRef by remember { mutableStateOf<WebView?>(null) }
 
-
-    fun injectWebOptimizations(view: WebView, dark: Boolean) {
+    fun injectWebTheme(view: WebView, dark: Boolean) {
         val bg = if (dark) "#0C0E14" else "#FFFFFF"
         val surface = if (dark) "#131314" else "#FFFFFF"
         val onSurface = if (dark) "#E3E3E3" else "#1F1F1F"
         val surfaceContainer = if (dark) "#1E1F20" else "#F0F4F9"
-        val colorScheme = if (dark) "dark" else "light"
+        val scheme = if (dark) "dark" else "light"
 
-        val optScript = """
+        val script = """
         (function() {
             var dark = $dark;
-            var scheme = '$colorScheme';
+            var scheme = '$scheme';
 
-            // 1. Enforce root color-scheme and CSS variables
             document.documentElement.style.setProperty('color-scheme', scheme, 'important');
             document.documentElement.setAttribute('data-theme', scheme);
             document.documentElement.classList.toggle('dark', dark);
@@ -83,91 +80,70 @@ fun WebViewContainer(
                 localStorage.setItem('themeMode', scheme);
             } catch(e) {}
 
-            var styleId = 'antigravity-native-enhancements';
+            var styleId = 'antigravity-native-theme';
             var style = document.getElementById(styleId);
             if (!style) {
                 style = document.createElement('style');
                 style.id = styleId;
-                document.head.appendChild(style);
+                (document.head || document.documentElement).appendChild(style);
             }
+            style.innerHTML = [
+                ':root, html, body {',
+                '  color-scheme: ' + scheme + ' !important;',
+                '  --mat-sys-background: $bg !important;',
+                '  --mat-sys-surface: $surface !important;',
+                '  --mat-sys-on-surface: $onSurface !important;',
+                '  --mat-sys-on-background: $onSurface !important;',
+                '  --mat-sys-surface-container: $surfaceContainer !important;',
+                '  --gm3-sys-color-background: $bg !important;',
+                '  --gm3-sys-color-surface: $surface !important;',
+                '  --gm3-sys-color-on-surface: $onSurface !important;',
+                '  background-color: $bg !important;',
+                '  color: $onSurface !important;',
+                '}',
+                'button[aria-label*="Context" i], button[aria-label*="Add" i],',
+                'button[title*="Context" i], button[title*="Add" i] {',
+                '  min-width: 44px !important; min-height: 44px !important;',
+                '  transform: scale(1.15) !important; transform-origin: center !important;',
+                '}',
+                'button[aria-haspopup="true"], [role="combobox"] {',
+                '  min-height: 38px !important;',
+                '  padding-left: 12px !important; padding-right: 12px !important;',
+                '}',
+                '[role="menu"], [role="listbox"], [role="dialog"], [data-radix-popper-content-wrapper] {',
+                '  z-index: 999999 !important;',
+                '}'
+            ].join('\n');
 
-            style.innerHTML = `
-                :root, html, body {
-                    color-scheme: $colorScheme !important;
-                    --mat-sys-background: $bg !important;
-                    --mat-sys-surface: $surface !important;
-                    --mat-sys-on-surface: $onSurface !important;
-                    --mat-sys-on-background: $onSurface !important;
-                    --mat-sys-surface-container: $surfaceContainer !important;
-                    --gm3-sys-color-background: $bg !important;
-                    --gm3-sys-color-surface: $surface !important;
-                    --gm3-sys-color-on-surface: $onSurface !important;
-                    --og-bar-background: $surface !important;
-                    --og-bar-color: $onSurface !important;
-                    background-color: $bg !important;
-                    color: $onSurface !important;
-                }
+            if (!window.__antiMobileSetup) {
+                window.__antiMobileSetup = true;
 
-                /* 2. Enlarge Add Context (+) button */
-                button[aria-label*="Context" i], button[aria-label*="Add" i],
-                button[title*="Context" i], button[title*="Add" i],
-                [data-tooltip*="Context" i], [data-tooltip*="Add" i] {
-                    min-width: 44px !important;
-                    min-height: 44px !important;
-                    padding: 8px !important;
-                    transform: scale(1.18) !important;
-                    transform-origin: center center !important;
-                }
-
-                /* 3. Model selector comfort size */
-                button[aria-haspopup="true"], [role="combobox"] {
-                    min-height: 38px !important;
-                    padding-left: 12px !important;
-                    padding-right: 12px !important;
-                }
-
-                /* 4. Keep popups and effort menus on top */
-                [role="menu"], [role="listbox"], [role="dialog"], [data-radix-popper-content-wrapper] {
-                    z-index: 999999 !important;
-                }
-            `;
-
-            
-            // 5. Synthesize mouse hover for Model Picker on mobile so Thinking Effort submenu expands
-            if (!window.__antiTouchHoverSetup) {
-                window.__antiTouchHoverSetup = true;
                 document.addEventListener('touchstart', function(e) {
                     var item = e.target.closest('[role="menuitem"], [role="option"], li');
-                    if (item && item.closest('[role="menu"], [role="listbox"], [data-radix-popper-content-wrapper]')) {
-                        var enterEvent = new MouseEvent('mouseenter', { bubbles: true, cancelable: true });
-                        var overEvent = new MouseEvent('mouseover', { bubbles: true, cancelable: true });
-                        item.dispatchEvent(enterEvent);
-                        item.dispatchEvent(overEvent);
+                    if (item) {
+                        item.dispatchEvent(new MouseEvent('mouseenter', {bubbles:true, cancelable:true}));
+                        item.dispatchEvent(new MouseEvent('mouseover', {bubbles:true, cancelable:true}));
                     }
-                }, { passive: true, capture: true });
-                
-                // Intercept click to prevent closing if it has a submenu
-                document.addEventListener('click', function(e) {
+                }, {passive: true, capture: true});
+
+                document.addEventListener('touchend', function(e) {
                     var item = e.target.closest('[role="menuitem"], [role="option"]');
-                    if (item && (item.hasAttribute('aria-haspopup') || item.getAttribute('aria-expanded') === 'false' || item.querySelector('[role="menu"]'))) {
-                        e.stopPropagation();
+                    if (!item) return;
+                    var hasSub = item.hasAttribute('aria-haspopup')
+                        || item.getAttribute('aria-expanded') === 'false'
+                        || !!item.querySelector('[role="menu"], [aria-haspopup]');
+                    if (hasSub) {
                         e.preventDefault();
                     }
-                }, { capture: true });
-            }
-);
-                        item.dispatchEvent(enterEvent);
-                        item.dispatchEvent(overEvent);
-                    }
-                }, { passive: true, capture: true });
+                }, {passive: false, capture: true});
             }
         })();
         """.trimIndent()
 
-        view.evaluateJavascript(optScript, null)
+        view.evaluateJavascript(script, null)
     }
 
-    fun applyThemeSettings(view: WebView, dark: Boolean) {
+    fun applyThemeToWebView(view: WebView, dark: Boolean) {
         try {
             if (WebViewFeature.isFeatureSupported(WebViewFeature.ALGORITHMIC_DARKENING)) {
                 WebSettingsCompat.setAlgorithmicDarkeningAllowed(view.settings, dark)
@@ -179,43 +155,42 @@ fun WebViewContainer(
                 )
             }
         } catch (e: Exception) {
-            Log.e("WebViewContainer", "Error applying theme settings: ${e.message}")
+            Log.e("WebViewContainer", "Error applying theme: ${e.message}")
         }
-
-        view.setBackgroundColor(if (dark) AndroidColor.parseColor("#0C0E14") else AndroidColor.parseColor("#FFFFFF"))
-        injectWebOptimizations(view, dark)
+        view.setBackgroundColor(
+            if (dark) AndroidColor.parseColor("#0C0E14") else AndroidColor.parseColor("#FFFFFF")
+        )
     }
 
     LaunchedEffect(isWebDark) {
-        webViewRef?.let {
-            applyThemeSettings(it, isWebDark)
-            it.reload()
+        webViewRef?.let { wv ->
+            applyThemeToWebView(wv, isWebDark)
+            injectWebTheme(wv, isWebDark)
+            wv.reload()
         }
     }
 
     fun applyDesktopMode(view: WebView, desktop: Boolean) {
-        val settings = view.settings
+        val s = view.settings
         if (desktop) {
-            settings.userAgentString = DESKTOP_UA
-            settings.useWideViewPort = true
-            settings.loadWithOverviewMode = true
-            settings.setSupportZoom(true)
-            settings.builtInZoomControls = true
-            settings.displayZoomControls = false
+            s.userAgentString = DESKTOP_UA
+            s.useWideViewPort = true
+            s.loadWithOverviewMode = true
+            s.setSupportZoom(true)
+            s.builtInZoomControls = true
+            s.displayZoomControls = false
         } else {
-            val defaultUA = settings.userAgentString
-            settings.userAgentString = defaultUA
-                .replace("; wv", "")
-                .replace("Version/4.0 ", "")
-            settings.useWideViewPort = true
-            settings.loadWithOverviewMode = true
+            val ua = s.userAgentString
+            s.userAgentString = ua.replace("; wv", "").replace("Version/4.0 ", "")
+            s.useWideViewPort = true
+            s.loadWithOverviewMode = true
         }
     }
 
     LaunchedEffect(isDesktopMode) {
-        webViewRef?.let {
-            applyDesktopMode(it, isDesktopMode)
-            it.reload()
+        webViewRef?.let { wv ->
+            applyDesktopMode(wv, isDesktopMode)
+            wv.reload()
         }
     }
 
@@ -256,7 +231,7 @@ fun WebViewContainer(
                     setGeolocationEnabled(true)
                 }
 
-                applyThemeSettings(this, currentIsWebDark)
+                applyThemeToWebView(this, currentIsWebDark)
                 applyDesktopMode(this, isDesktopMode)
 
                 val cookieManager = CookieManager.getInstance()
@@ -269,9 +244,7 @@ fun WebViewContainer(
                     }
 
                     override fun onReceivedTitle(view: WebView?, title: String?) {
-                        if (!title.isNullOrEmpty()) {
-                            currentOnTitleChange(title)
-                        }
+                        if (!title.isNullOrEmpty()) currentOnTitleChange(title)
                     }
 
                     override fun onShowFileChooser(
@@ -285,54 +258,45 @@ fun WebViewContainer(
 
                 webViewClient = object : WebViewClient() {
                     override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
-                        if (!url.isNullOrEmpty()) {
-                            currentOnUrlChange(url)
-                        }
-                        view?.let { injectWebOptimizations(it, currentIsWebDark) }
+                        if (!url.isNullOrEmpty()) currentOnUrlChange(url)
+                        view?.let { injectWebTheme(it, currentIsWebDark) }
                     }
 
                     override fun onPageFinished(view: WebView?, finishedUrl: String?) {
-                        if (!finishedUrl.isNullOrEmpty()) {
-                            currentOnUrlChange(finishedUrl)
-                        }
+                        if (!finishedUrl.isNullOrEmpty()) currentOnUrlChange(finishedUrl)
                         currentOnProgressChange(100)
                         CookieManager.getInstance().flush()
+                        view?.let { injectWebTheme(it, currentIsWebDark) }
 
-                        view?.let { injectWebOptimizations(it, currentIsWebDark) }
-
-                        if (currentAutoConnect && finishedUrl != null && finishedUrl.contains("antigravity.google.com")) {
+                        if (currentAutoConnect && finishedUrl != null &&
+                            finishedUrl.contains("antigravity.google.com")
+                        ) {
                             val jsAutoConnect = """
                             (function() {
                                 if (window.__antiAutoConnected) return;
-                                function tryClickConnect() {
+                                function tryConnect() {
                                     if (window.__antiAutoConnected) return false;
-                                    var candidates = document.querySelectorAll('button, a, [role="button"]');
-                                    for (var i = 0; i < candidates.length; i++) {
-                                        var el = candidates[i];
-                                        var text = (el.textContent || '').trim().toLowerCase();
-                                        var aria = (el.getAttribute('aria-label') || '').toLowerCase();
-                                        if (text === 'connect' || aria === 'connect' || text.indexOf('connect') !== -1 || aria.indexOf('connect') !== -1) {
-                                            if (el.offsetParent !== null && !el.disabled && !el.getAttribute('aria-disabled')) {
-                                                window.__antiAutoConnected = true;
-                                                el.click();
-                                                return true;
-                                            }
+                                    var els = document.querySelectorAll('button, a, [role="button"]');
+                                    for (var i = 0; i < els.length; i++) {
+                                        var el = els[i];
+                                        var t = (el.textContent || '').trim().toLowerCase();
+                                        var a = (el.getAttribute('aria-label') || '').toLowerCase();
+                                        if ((t === 'connect' || a === 'connect' ||
+                                             t.indexOf('connect') !== -1 || a.indexOf('connect') !== -1) &&
+                                            el.offsetParent !== null && !el.disabled) {
+                                            window.__antiAutoConnected = true;
+                                            el.click();
+                                            return true;
                                         }
                                     }
                                     return false;
                                 }
-                                if (tryClickConnect()) return;
-                                var observer = new MutationObserver(function(mutations, obs) {
-                                    if (tryClickConnect()) {
-                                        obs.disconnect();
-                                    }
+                                if (tryConnect()) return;
+                                var obs = new MutationObserver(function(m, o) {
+                                    if (tryConnect()) o.disconnect();
                                 });
-                                if (document.body) {
-                                    observer.observe(document.body, { childList: true, subtree: true });
-                                }
-                                setTimeout(function() {
-                                    observer.disconnect();
-                                }, 15000);
+                                if (document.body) obs.observe(document.body, {childList:true, subtree:true});
+                                setTimeout(function() { obs.disconnect(); }, 15000);
                             })();
                             """.trimIndent()
                             evaluateJavascript(jsAutoConnect, null)
@@ -342,17 +306,13 @@ fun WebViewContainer(
                     override fun shouldOverrideUrlLoading(
                         view: WebView?,
                         request: WebResourceRequest?
-                    ): Boolean {
-                        return false
-                    }
+                    ): Boolean = false
                 }
 
                 loadUrl(url)
                 onWebViewCreated(this)
             }
         },
-        update = {
-            // Recreated on key(accountId)
-        }
+        update = { /* Recreated on key(accountId) */ }
     )
 }

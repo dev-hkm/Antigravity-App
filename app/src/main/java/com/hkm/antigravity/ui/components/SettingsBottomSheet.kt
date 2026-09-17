@@ -76,7 +76,7 @@ fun SettingsBottomSheet(
                     Icon(
                         imageVector = Lucide.Settings,
                         contentDescription = "Settings",
-                        tint = AccentBlue,
+                        tint = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.size(22.dp)
                     )
                 }
@@ -266,7 +266,7 @@ fun SettingsBottomSheet(
                         text = "Visible Toolbar Actions",
                         fontSize = 13.sp,
                         fontWeight = FontWeight.SemiBold,
-                        color = AccentBlue,
+                        color = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.padding(bottom = 6.dp)
                     )
 
@@ -387,10 +387,10 @@ fun SettingsBottomSheet(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Text(
-                    text = "v1.3.3 • Signed Release",
+                    text = "v1.3.4 • Signed Release",
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Medium,
-                    color = AccentBlue
+                    color = MaterialTheme.colorScheme.primary
                 )
             }
         }
@@ -404,7 +404,7 @@ private fun SettingsSectionHeader(title: String) {
         fontSize = 11.sp,
         fontWeight = FontWeight.Bold,
         letterSpacing = 0.8.sp,
-        color = AccentBlue,
+        color = MaterialTheme.colorScheme.primary,
         modifier = Modifier.padding(bottom = 8.dp, start = 4.dp)
     )
 }
@@ -424,7 +424,7 @@ private fun SettingsRowSwitch(
         Icon(
             imageVector = icon,
             contentDescription = title,
-            tint = AccentBlue,
+            tint = MaterialTheme.colorScheme.primary,
             modifier = Modifier.size(22.dp)
         )
         Spacer(modifier = Modifier.width(14.dp))
