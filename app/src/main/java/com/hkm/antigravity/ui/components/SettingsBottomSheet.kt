@@ -24,8 +24,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.hkm.antigravity.data.model.AppSettings
-import com.hkm.antigravity.ui.theme.AccentBlue
-import com.hkm.antigravity.ui.theme.DangerRed
 import com.hkm.antigravity.ui.theme.Lucide
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -40,6 +38,7 @@ fun SettingsBottomSheet(
     onUpdateDesktopMode: (Boolean) -> Unit,
     onUpdatePillOrientation: (String) -> Unit,
     onUpdatePillScale: (String) -> Unit,
+    onUpdatePillOpacity: (Float) -> Unit,
     onUpdateToolbarButtons: (showAccount: Boolean, showDesktop: Boolean, showWebTheme: Boolean, showReload: Boolean, showSettings: Boolean) -> Unit,
     onClearCache: () -> Unit
 ) {
@@ -70,7 +69,7 @@ fun SettingsBottomSheet(
                     modifier = Modifier
                         .size(42.dp)
                         .clip(CircleShape)
-                        .background(AccentBlue.copy(alpha = 0.2f)),
+                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
@@ -134,6 +133,7 @@ fun SettingsBottomSheet(
                             }
                         }
                     }
+
                 }
             }
 
@@ -257,6 +257,27 @@ fun SettingsBottomSheet(
                         }
                     }
 
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    Text(
+                        text = "Toolbar Opacity",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = "Adjust how strongly the floating toolbar stands out",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Slider(
+                        value = settings.pillOpacity,
+                        onValueChange = onUpdatePillOpacity,
+                        valueRange = 0.35f..1f,
+                        steps = 12,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
                     HorizontalDivider(
                         modifier = Modifier.padding(vertical = 12.dp),
                         color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
@@ -353,7 +374,7 @@ fun SettingsBottomSheet(
                     Icon(
                         imageVector = Lucide.Trash,
                         contentDescription = "Clear Cache",
-                        tint = DangerRed,
+                        tint = MaterialTheme.colorScheme.error,
                         modifier = Modifier.size(22.dp)
                     )
                     Spacer(modifier = Modifier.width(14.dp))

@@ -71,6 +71,10 @@ class SettingsRepository(context: Context) {
         saveSettings(_settingsFlow.value.copy(pillScale = scale))
     }
 
+    fun setPillOpacity(opacity: Float) {
+        saveSettings(_settingsFlow.value.copy(pillOpacity = opacity.coerceIn(0.35f, 1f)))
+    }
+
     fun setToolbarButtons(
         showAccount: Boolean = _settingsFlow.value.showAccountOnPill,
         showDesktop: Boolean = _settingsFlow.value.showDesktopOnPill,

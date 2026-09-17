@@ -10,6 +10,7 @@ data class AppSettings(
     // Toolbar Customization
     val pillOrientation: String = "horizontal", // "horizontal", "vertical"
     val pillScale: String = "standard", // "compact", "standard", "large"
+    val pillOpacity: Float = 0.90f,
     val showAccountOnPill: Boolean = true,
     val showDesktopOnPill: Boolean = true,
     val showWebThemeOnPill: Boolean = true,

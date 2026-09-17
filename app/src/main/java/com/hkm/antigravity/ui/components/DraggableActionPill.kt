@@ -25,6 +25,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import com.hkm.antigravity.ui.theme.Lucide
@@ -38,6 +39,7 @@ fun DraggableActionPill(
     webTheme: String,
     orientation: String = "horizontal",
     scale: String = "standard",
+    opacity: Float = 0.90f,
     showAccount: Boolean = true,
     showDesktop: Boolean = true,
     showWebTheme: Boolean = true,
@@ -64,8 +66,12 @@ fun DraggableActionPill(
 
     val isVertical = orientation == "vertical"
 
-    val pillW = with(density) { (if (isVertical) 52.dp else 190.dp).toPx() }
-    val pillH = with(density) { (if (isVertical) 190.dp else 44.dp).toPx() }
+    var measuredWidthPx by remember { mutableIntStateOf(0) }
+    var measuredHeightPx by remember { mutableIntStateOf(0) }
+    val estimatedWidthPx = with(density) { (if (isVertical) 52.dp else 190.dp).toPx() }
+    val estimatedHeightPx = with(density) { (if (isVertical) 190.dp else 44.dp).toPx() }
+    val pillW = if (measuredWidthPx > 0) measuredWidthPx.toFloat() else estimatedWidthPx
+    val pillH = if (measuredHeightPx > 0) measuredHeightPx.toFloat() else estimatedHeightPx
     val safeMargin = with(density) { 6.dp.toPx() }
     val minX = safeMargin
     val maxX = (screenWidthPx - pillW - safeMargin).coerceAtLeast(minX)
@@ -73,7 +79,7 @@ fun DraggableActionPill(
     val maxY = (screenHeightPx - pillH - with(density) { 50.dp.toPx() }).coerceAtLeast(minY)
 
     // Initial position
-    var offsetX by remember { mutableFloatStateOf(maxX - with(density) { 10.dp.toPx() }) }
+    var offsetX by remember { mutableFloatStateOf(maxX) }
     var offsetY by remember { mutableFloatStateOf(with(density) { 70.dp.toPx() }) }
     
     var isDragging by remember { mutableStateOf(false) }
@@ -87,13 +93,17 @@ fun DraggableActionPill(
 
 
     val pillAlpha by animateFloatAsState(
-        targetValue = if (isDragging) 1.0f else 0.90f,
+        targetValue = if (isDragging) 1.0f else opacity.coerceIn(0.35f, 1f),
         animationSpec = spring(stiffness = Spring.StiffnessLow),
         label = "pillAlpha"
     )
 
     Box(
         modifier = modifier
+            .onSizeChanged {
+                measuredWidthPx = it.width
+                measuredHeightPx = it.height
+            }
             .offset { IntOffset(offsetX.roundToInt(), offsetY.roundToInt()) }
             .pointerInput(orientation, scale) {
                 detectDragGestures(

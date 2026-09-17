@@ -155,6 +155,7 @@ fun MainScreen(
             webTheme = settings.webTheme,
             orientation = settings.pillOrientation,
             scale = settings.pillScale,
+            opacity = settings.pillOpacity,
             showAccount = settings.showAccountOnPill,
             showDesktop = settings.showDesktopOnPill,
             showWebTheme = settings.showWebThemeOnPill,
@@ -221,6 +222,9 @@ fun MainScreen(
             },
             onUpdatePillScale = { scale ->
                 settingsRepository.setPillScale(scale)
+            },
+            onUpdatePillOpacity = { opacity ->
+                settingsRepository.setPillOpacity(opacity)
             },
             onUpdateToolbarButtons = { showAcc, showDesk, showWeb, showRel, showSet ->
                 settingsRepository.setToolbarButtons(showAcc, showDesk, showWeb, showRel, showSet)
