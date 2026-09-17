@@ -295,39 +295,43 @@ fun MainScreen(
             val accountId = activeAccount?.id ?: "acc_primary"
             val targetUrl = activeAccount?.url ?: AccountRepository.DEFAULT_REMOTE_URL
 
-            // Main Web View with multi-profile and file choosing support
-            WebViewContainer(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .navigationBarsPadding(),
-                accountId = accountId,
-                url = targetUrl,
-                onWebViewCreated = { webView ->
-                    webViewInstance = webView
-                },
-                onProgressChange = { pageProgress = it },
-                onTitleChange = { /* Title update */ },
-                onUrlChange = { url ->
-                    currentUrl = url
-                },
-                onShowFileChooser = { callback, params ->
-                    filePathCallback?.onReceiveValue(null)
-                    filePathCallback = callback
-
-                    val intent = params?.createIntent() ?: Intent(Intent.ACTION_GET_CONTENT).apply {
-                        type = "*/*"
-                        putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
-                    }
-                    try {
-                        filePickerLauncher.launch(intent)
-                        true
-                    } catch (e: Exception) {
+            // Keying by accountId guarantees a fresh, clean WebView with isolated profile
+            key(accountId) {
+                WebViewContainer(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .imePadding()
+                        .navigationBarsPadding()
+                        .then(if (isZenMode) Modifier.statusBarsPadding() else Modifier),
+                    accountId = accountId,
+                    url = targetUrl,
+                    onWebViewCreated = { webView ->
+                        webViewInstance = webView
+                    },
+                    onProgressChange = { pageProgress = it },
+                    onTitleChange = { /* Title update */ },
+                    onUrlChange = { url ->
+                        currentUrl = url
+                    },
+                    onShowFileChooser = { callback, params ->
                         filePathCallback?.onReceiveValue(null)
-                        filePathCallback = null
-                        false
+                        filePathCallback = callback
+
+                        val intent = params?.createIntent() ?: Intent(Intent.ACTION_GET_CONTENT).apply {
+                            type = "*/*"
+                            putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
+                        }
+                        try {
+                            filePickerLauncher.launch(intent)
+                            true
+                        } catch (e: Exception) {
+                            filePathCallback?.onReceiveValue(null)
+                            filePathCallback = null
+                            false
+                        }
                     }
-                }
-            )
+                )
+            }
 
             // Floating button to exit Zen Mode
             AnimatedVisibility(
@@ -390,17 +394,13 @@ fun MainScreen(
                 if (accountToEdit != null) {
                     repository.updateAccount(accountToEdit!!.id, name, colorHex, url)
                 } else {
-                    val created = repository.createAccount(name, colorHex, url)
-                    webViewInstance?.loadUrl(created.url)
+                    repository.createAccount(name, colorHex, url)
                 }
                 showAccountDialog = false
             },
             onDelete = {
                 if (accountToEdit != null) {
                     repository.deleteAccount(accountToEdit!!.id)
-                    repository.getActiveAccount()?.let { next ->
-                        webViewInstance?.loadUrl(next.url)
-                    }
                 }
                 showAccountDialog = false
             }

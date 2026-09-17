@@ -3,6 +3,7 @@ package com.hkm.antigravity.ui.components
 import android.annotation.SuppressLint
 import android.graphics.Bitmap
 import android.net.Uri
+import android.util.Log
 import android.view.ViewGroup
 import android.webkit.*
 import androidx.compose.runtime.*
@@ -33,14 +34,14 @@ fun WebViewContainer(
                     ViewGroup.LayoutParams.MATCH_PARENT
                 )
 
-                // Assign isolated profile if supported on device
+                // Assign isolated profile if supported on device (MUST be called before any loadUrl)
                 if (WebViewFeature.isFeatureSupported(WebViewFeature.MULTI_PROFILE)) {
                     try {
                         val profileName = "account_$accountId"
                         ProfileStore.getInstance().getOrCreateProfile(profileName)
                         WebViewCompat.setProfile(this, profileName)
                     } catch (e: Exception) {
-                        // Fallback to default profile
+                        Log.e("WebViewContainer", "Error setting profile: ${e.message}")
                     }
                 }
 
@@ -119,17 +120,8 @@ fun WebViewContainer(
                 onWebViewCreated(this)
             }
         },
-        update = { webView ->
-            // Reassign profile if account changed and supported
-            if (WebViewFeature.isFeatureSupported(WebViewFeature.MULTI_PROFILE)) {
-                try {
-                    val profileName = "account_$accountId"
-                    ProfileStore.getInstance().getOrCreateProfile(profileName)
-                    WebViewCompat.setProfile(webView, profileName)
-                } catch (e: Exception) {
-                    // Ignored
-                }
-            }
+        update = {
+            // No-op for profile; key(accountId) recreates the view cleanly
         }
     )
 }

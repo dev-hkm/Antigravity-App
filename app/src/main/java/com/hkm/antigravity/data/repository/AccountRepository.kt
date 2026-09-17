@@ -27,12 +27,21 @@ class AccountRepository(private val context: Context) {
 
     private fun loadData() {
         val json = prefs.getString(KEY_ACCOUNTS, null)
-        val list: MutableList<Account> = if (!json.isNullOrEmpty()) {
+        var list: MutableList<Account> = if (!json.isNullOrEmpty()) {
             val type = object : TypeToken<MutableList<Account>>() {}.type
             gson.fromJson(json, type) ?: mutableListOf()
         } else {
             mutableListOf()
         }
+
+        // Auto-migrate any old URLs to the official remote dashboard
+        list = list.map { acc ->
+            if (acc.url.contains("antigravity.google/remote") || acc.url == "https://antigravity.google") {
+                acc.copy(url = DEFAULT_REMOTE_URL)
+            } else {
+                acc
+            }
+        }.toMutableList()
 
         if (list.isEmpty()) {
             val defaultAcc = Account(
@@ -42,9 +51,9 @@ class AccountRepository(private val context: Context) {
                 url = DEFAULT_REMOTE_URL
             )
             list.add(defaultAcc)
-            saveAccountsList(list)
         }
 
+        saveAccountsList(list)
         _accountsFlow.value = list
 
         val savedActiveId = prefs.getString(KEY_ACTIVE_ID, null)
@@ -70,11 +79,18 @@ class AccountRepository(private val context: Context) {
     }
 
     fun createAccount(name: String, colorHex: String, url: String): Account {
+        val cleanUrl = url.trim().ifBlank { DEFAULT_REMOTE_URL }
+        val targetUrl = if (cleanUrl.contains("antigravity.google/remote") || cleanUrl == "https://antigravity.google") {
+            DEFAULT_REMOTE_URL
+        } else {
+            cleanUrl
+        }
+
         val newAcc = Account(
             id = "acc_" + System.currentTimeMillis(),
             name = name.ifBlank { "Account " + (_accountsFlow.value.size + 1) },
             colorHex = colorHex.ifBlank { "#6366f1" },
-            url = url.ifBlank { DEFAULT_REMOTE_URL }
+            url = targetUrl
         )
 
         val updated = _accountsFlow.value.toMutableList().apply { add(newAcc) }
@@ -89,10 +105,17 @@ class AccountRepository(private val context: Context) {
         val currentList = _accountsFlow.value.toMutableList()
         val index = currentList.indexOfFirst { it.id == id }
         if (index != -1) {
+            val cleanUrl = url.trim().ifBlank { DEFAULT_REMOTE_URL }
+            val targetUrl = if (cleanUrl.contains("antigravity.google/remote") || cleanUrl == "https://antigravity.google") {
+                DEFAULT_REMOTE_URL
+            } else {
+                cleanUrl
+            }
+
             val updated = currentList[index].copy(
                 name = name.ifBlank { currentList[index].name },
                 colorHex = colorHex.ifBlank { currentList[index].colorHex },
-                url = url.ifBlank { currentList[index].url }
+                url = targetUrl
             )
             currentList[index] = updated
             _accountsFlow.value = currentList
@@ -126,7 +149,7 @@ class AccountRepository(private val context: Context) {
     }
 
     companion object {
-        const val DEFAULT_REMOTE_URL = "https://antigravity.google/remote"
+        const val DEFAULT_REMOTE_URL = "https://antigravity.google.com"
         private const val KEY_ACCOUNTS = "key_accounts_json"
         private const val KEY_ACTIVE_ID = "key_active_account_id"
     }
