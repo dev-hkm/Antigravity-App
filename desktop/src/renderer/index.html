@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Antigravity</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- Titlebar -->
+  <header class="titlebar" id="titlebar">
+    <div class="titlebar-left">
+      <div class="app-brand">
+        <svg class="brand-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10"></circle>
+          <path d="m4.93 4.93 4.24 4.24"></path>
+          <path d="m14.83 9.17 4.24-4.24"></path>
+          <path d="m14.83 14.83 4.24 4.24"></path>
+          <path d="m9.17 14.83-4.24 4.24"></path>
+          <circle cx="12" cy="12" r="4"></circle>
+        </svg>
+        <span class="brand-text">Antigravity</span>
+      </div>
+      <div class="title-divider"></div>
+      <div class="active-account-badge" id="titleActiveAccount">
+        <span class="badge-dot" id="titleBadgeDot"></span>
+        <span class="badge-name" id="titleBadgeName">Loading...</span>
+      </div>
+    </div>
+
+    <div class="titlebar-drag-region"></div>
+
+    <div class="titlebar-controls">
+      <button class="win-btn win-minimize" id="btnMinimize" title="Minimize">
+        <svg width="11" height="1" viewBox="0 0 11 1"><rect width="11" height="1" fill="currentColor"/></svg>
+      </button>
+      <button class="win-btn win-maximize" id="btnMaximize" title="Maximize">
+        <svg id="iconMaximize" width="10" height="10" viewBox="0 0 10 10"><rect width="9" height="9" x="0.5" y="0.5" fill="none" stroke="currentColor" stroke-width="1"/></svg>
+        <svg id="iconRestore" class="hidden" width="10" height="10" viewBox="0 0 10 10">
+          <rect width="7" height="7" x="2.5" y="0.5" fill="none" stroke="currentColor" stroke-width="1"/>
+          <path d="M0.5 2.5v7h7v-7h-7z" fill="#0c0e14" stroke="currentColor" stroke-width="1"/>
+        </svg>
+      </button>
+      <button class="win-btn win-close" id="btnClose" title="Close">
+        <svg width="10" height="10" viewBox="0 0 10 10"><path d="M1 1l8 8M9 1l-8 8" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <div class="app-layout">
+    <!-- Left Sidebar: Account Switcher -->
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-accounts" id="accountsList">
+        <!-- Dynamically populated account avatars -->
+      </div>
+
+      <div class="sidebar-actions">
+        <button class="sidebar-btn add-btn" id="btnAddAccount" title="Thêm tài khoản mới">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="12" y1="5" x2="12" y2="19"></line>
+            <line x1="5" y1="12" x2="19" y2="12"></line>
+          </svg>
+        </button>
+        <button class="sidebar-btn settings-btn" id="btnOpenSettings" title="Cài đặt & Phím tắt">
+          <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"></path>
+            <circle cx="12" cy="12" r="3"></circle>
+          </svg>
+        </button>
+      </div>
+    </aside>
+
+    <!-- Main Content Area -->
+    <div class="content-wrapper">
+      <!-- Navigation Bar -->
+      <nav class="navbar" id="navbar">
+        <div class="nav-controls">
+          <button class="nav-btn" id="btnNavBack" title="Quay lại (Alt+Left)" disabled>
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="15 18 9 12 15 6"></polyline>
+            </svg>
+          </button>
+          <button class="nav-btn" id="btnNavForward" title="Tiến lên (Alt+Right)" disabled>
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="9 18 15 12 9 6"></polyline>
+            </svg>
+          </button>
+          <button class="nav-btn" id="btnNavReload" title="Tải lại (Ctrl+R)">
+            <svg id="iconReload" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"></path>
+            </svg>
+          </button>
+          <button class="nav-btn" id="btnNavHome" title="Trang chủ tài khoản">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+              <polyline points="9 22 9 12 15 12 15 22"></polyline>
+            </svg>
+          </button>
+        </div>
+
+        <div class="nav-address-bar">
+          <svg class="ssl-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+            <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+          </svg>
+          <span class="url-display" id="urlDisplay">https://antigravity.google</span>
+          <div class="progress-bar-indicator" id="progressIndicator"></div>
+        </div>
+
+        <div class="nav-actions">
+          <button class="nav-btn" id="btnEditCurrentAccount" title="Sửa thông tin tài khoản này">
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 20h9"></path>
+              <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
+            </svg>
+          </button>
+          <button class="nav-btn" id="btnOpenExternal" title="Mở trên trình duyệt ngoài">
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+              <polyline points="15 3 21 3 21 9"></polyline>
+              <line x1="10" y1="14" x2="21" y2="3"></line>
+            </svg>
+          </button>
+          <button class="nav-btn" id="btnToggleDevTools" title="DevTools (Ctrl+Shift+I)">
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="16 18 22 12 16 6"></polyline>
+              <polyline points="8 6 2 12 8 18"></polyline>
+            </svg>
+          </button>
+          <button class="nav-btn" id="btnToggleZen" title="Chế độ toàn diện (Ẩn thanh công cụ)">
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="18 15 12 9 6 15"></polyline>
+            </svg>
+          </button>
+        </div>
+      </nav>
+
+      <!-- WebContentsView is mounted here by Electron Main Process -->
+      <div class="web-view-placeholder" id="viewContainer">
+        <!-- Floating restore button if navbar is hidden -->
+        <button class="btn-restore-navbar hidden" id="btnRestoreNavbar" title="Hiện thanh công cụ">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="6 9 12 15 18 9"></polyline>
+          </svg>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Account Modal (Add / Edit) -->
+  <div class="modal-overlay hidden" id="accountModal">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 id="modalTitle">Thêm tài khoản mới</h3>
+        <button class="btn-modal-close" id="btnCloseAccountModal">&times;</button>
+      </div>
+      <form id="accountForm" class="modal-body">
+        <input type="hidden" id="editAccountId" value="">
+
+        <div class="form-group">
+          <label for="accName">Tên gợi nhớ tài khoản</label>
+          <input type="text" id="accName" placeholder="VD: Công việc, Cá nhân, Khách hàng X" required autocomplete="off">
+        </div>
+
+        <div class="form-group">
+          <label for="accUrl">URL Antigravity Web</label>
+          <input type="url" id="accUrl" placeholder="https://antigravity.google" required autocomplete="off">
+          <span class="form-hint">Để mặc định https://antigravity.google hoặc nhập URL workspace riêng</span>
+        </div>
+
+        <div class="form-group">
+          <label>Màu đại diện</label>
+          <div class="color-palette" id="colorPalette">
+            <button type="button" class="color-dot active" data-color="#3b82f6" style="background: #3b82f6;"></button>
+            <button type="button" class="color-dot" data-color="#6366f1" style="background: #6366f1;"></button>
+            <button type="button" class="color-dot" data-color="#8b5cf6" style="background: #8b5cf6;"></button>
+            <button type="button" class="color-dot" data-color="#ec4899" style="background: #ec4899;"></button>
+            <button type="button" class="color-dot" data-color="#f43f5e" style="background: #f43f5e;"></button>
+            <button type="button" class="color-dot" data-color="#f59e0b" style="background: #f59e0b;"></button>
+            <button type="button" class="color-dot" data-color="#10b981" style="background: #10b981;"></button>
+            <button type="button" class="color-dot" data-color="#06b6d4" style="background: #06b6d4;"></button>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn-danger hidden" id="btnDeleteAccount">Xóa tài khoản này</button>
+          <div class="footer-actions">
+            <button type="button" class="btn-secondary" id="btnCancelAccountModal">Hủy</button>
+            <button type="submit" class="btn-primary" id="btnSaveAccount">Lưu tài khoản</button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Settings Modal -->
+  <div class="modal-overlay hidden" id="settingsModal">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3>Cài đặt & Phím tắt</h3>
+        <button class="btn-modal-close" id="btnCloseSettingsModal">&times;</button>
+      </div>
+      <div class="modal-body settings-content">
+        <div class="settings-section">
+          <h4>Phím tắt tiện dụng</h4>
+          <div class="shortcut-list">
+            <div class="shortcut-item">
+              <span class="shortcut-label">Chuyển nhanh tài khoản 1 đến 9</span>
+              <kbd>Ctrl</kbd> + <kbd>1</kbd> .. <kbd>9</kbd>
+            </div>
+            <div class="shortcut-item">
+              <span class="shortcut-label">Chuyển sang tài khoản tiếp theo</span>
+              <kbd>Ctrl</kbd> + <kbd>Tab</kbd>
+            </div>
+            <div class="shortcut-item">
+              <span class="shortcut-label">Chuyển về tài khoản trước đó</span>
+              <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>Tab</kbd>
+            </div>
+            <div class="shortcut-item">
+              <span class="shortcut-label">Tải lại trang web</span>
+              <kbd>Ctrl</kbd> + <kbd>R</kbd> hoặc <kbd>F5</kbd>
+            </div>
+            <div class="shortcut-item">
+              <span class="shortcut-label">Bật/Tắt Developer Tools</span>
+              <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>I</kbd>
+            </div>
+          </div>
+        </div>
+
+        <div class="settings-section">
+          <h4>Cấu hình hệ thống</h4>
+          <div class="form-group-toggle">
+            <div>
+              <div class="toggle-title">Hiển thị thanh điều hướng URL (Navbar)</div>
+              <div class="form-hint">Nếu tắt, bạn sẽ có 100% không gian code Antigravity</div>
+            </div>
+            <label class="switch">
+              <input type="checkbox" id="toggleNavBarSetting" checked>
+              <span class="slider round"></span>
+            </label>
+          </div>
+        </div>
+
+        <div class="settings-section">
+          <div class="about-card">
+            <div class="about-title">Antigravity Desktop Client v1.0.0</div>
+            <p class="about-desc">Được xây dựng chuyên biệt với cơ chế đa phiên độc lập (Multi-Session Isolated Partitions). Mỗi tài khoản lưu trữ cookies và token riêng biệt vĩnh viễn.</p>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn-primary" id="btnDoneSettings">Đóng</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="renderer.js"></script>
+</body>
+</html>

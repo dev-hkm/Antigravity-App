@@ -1,0 +1,35 @@
+{
+  "name": "antigravity-desktop",
+  "version": "1.0.0",
+  "description": "Premium multi-account desktop client for Google Antigravity",
+  "main": "src/main/main.js",
+  "scripts": {
+    "start": "electron .",
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder"
+  },
+  "keywords": [
+    "antigravity",
+    "desktop",
+    "multi-account",
+    "electron"
+  ],
+  "author": "Antigravity",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^34.5.8",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "com.antigravity.desktop",
+    "productName": "Antigravity",
+    "directories": {
+      "output": "dist"
+    },
+    "win": {
+      "target": [
+        "portable"
+      ]
+    }
+  }
+}
