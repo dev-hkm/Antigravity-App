@@ -118,24 +118,51 @@ fun WebViewContainer(
             if (!window.__antiMobileSetup) {
                 window.__antiMobileSetup = true;
 
+                // Count all open popover layers at any moment
+                function countMenuLayers() {
+                    return document.querySelectorAll('[data-radix-popper-content-wrapper], [role="menu"]').length;
+                }
+
+                var layersBeforeTouch = 0;
+
                 document.addEventListener('touchstart', function(e) {
                     var item = e.target.closest('[role="menuitem"], [role="option"], li');
-                    if (item) {
-                        item.dispatchEvent(new MouseEvent('mouseenter', {bubbles:true, cancelable:true}));
-                        item.dispatchEvent(new MouseEvent('mouseover', {bubbles:true, cancelable:true}));
-                    }
+                    if (!item) return;
+
+                    // Snapshot how many menus are open RIGHT NOW (before hover)
+                    layersBeforeTouch = countMenuLayers();
+
+                    // Synthesize hover so Radix opens the effort submenu
+                    item.dispatchEvent(new MouseEvent('pointerover', {bubbles:true, cancelable:true}));
+                    item.dispatchEvent(new MouseEvent('mouseenter', {bubbles:true, cancelable:true}));
+                    item.dispatchEvent(new MouseEvent('mouseover',  {bubbles:true, cancelable:true}));
+                    item.dispatchEvent(new MouseEvent('mousemove',  {bubbles:true, cancelable:true}));
                 }, {passive: true, capture: true});
 
                 document.addEventListener('touchend', function(e) {
                     var item = e.target.closest('[role="menuitem"], [role="option"]');
                     if (!item) return;
-                    var hasSub = item.hasAttribute('aria-haspopup')
-                        || item.getAttribute('aria-expanded') === 'false'
-                        || !!item.querySelector('[role="menu"], [aria-haspopup]');
-                    if (hasSub) {
+
+                    // After the hover events above, check if a NEW menu layer appeared
+                    var layersNow = countMenuLayers();
+                    if (layersNow > layersBeforeTouch) {
+                        // A submenu (effort picker) just opened — block this touch→click
+                        // so user can now tap the effort option without menu closing
                         e.preventDefault();
+                        e.stopPropagation();
                     }
                 }, {passive: false, capture: true});
+
+                // Also intercept the synthetic click that fires after touchend
+                document.addEventListener('click', function(e) {
+                    var item = e.target.closest('[role="menuitem"], [role="option"]');
+                    if (!item) return;
+                    var layersNow = countMenuLayers();
+                    if (layersNow > layersBeforeTouch) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                    }
+                }, {capture: true});
             }
         })();
         """.trimIndent()
