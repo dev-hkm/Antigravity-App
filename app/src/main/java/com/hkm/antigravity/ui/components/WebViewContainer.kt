@@ -5,6 +5,7 @@ import android.graphics.Bitmap
 import android.graphics.Color as AndroidColor
 import android.net.Uri
 import android.util.Log
+import android.widget.Toast
 import android.view.ViewGroup
 import android.webkit.*
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -15,6 +16,7 @@ import androidx.webkit.ProfileStore
 import androidx.webkit.WebSettingsCompat
 import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
+import com.hkm.antigravity.data.repository.AccountRepository
 
 private const val DESKTOP_UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36"
 
@@ -32,6 +34,7 @@ fun WebViewContainer(
     onProgressChange: (Int) -> Unit,
     onTitleChange: (String) -> Unit,
     onUrlChange: (String) -> Unit,
+    onRendererCrashed: () -> Unit,
     onShowFileChooser: (ValueCallback<Array<Uri>>?, WebChromeClient.FileChooserParams?) -> Boolean
 ) {
     val systemDark = isSystemInDarkTheme()
@@ -212,9 +215,13 @@ fun WebViewContainer(
                 // The model picker lives in a cross-origin iframe. evaluateJavascript
                 // targets only the host page; register before navigation for every matching frame.
                 if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
-                    WebViewCompat.addDocumentStartJavaScript(
-                        this, EffortPickerBridge.script, EffortPickerBridge.allowedOrigins
-                    )
+                    try {
+                        WebViewCompat.addDocumentStartJavaScript(
+                            this, EffortPickerBridge.script, EffortPickerBridge.allowedOrigins
+                        )
+                    } catch (_: Exception) {
+                        Toast.makeText(context, "Model effort support is unavailable in this WebView.", Toast.LENGTH_LONG).show()
+                    }
                 } else {
                     android.widget.Toast.makeText(
                         context,
@@ -261,7 +268,8 @@ fun WebViewContainer(
                         view?.let { injectWebTheme(it, currentIsWebDark) }
 
                         if (currentAutoConnect && finishedUrl != null &&
-                            finishedUrl.contains("antigravity.google.com")
+                            view?.url == finishedUrl &&
+                            Uri.parse(finishedUrl).host == Uri.parse(AccountRepository.DEFAULT_REMOTE_URL).host
                         ) {
                             val jsAutoConnect = """
                             (function() {
@@ -273,9 +281,11 @@ fun WebViewContainer(
                                         var el = els[i];
                                         var t = (el.textContent || '').trim().toLowerCase();
                                         var a = (el.getAttribute('aria-label') || '').toLowerCase();
-                                        if ((t === 'connect' || a === 'connect' ||
-                                             t.indexOf('connect') !== -1 || a.indexOf('connect') !== -1) &&
-                                            el.offsetParent !== null && !el.disabled) {
+                                        var textIsConnect = /(^|\s)connect(\s|$)/.test(t);
+                                        var ariaIsConnect = /(^|\s)connect(\s|$)/.test(a);
+                                        if ((textIsConnect || ariaIsConnect) &&
+                                            el.offsetParent !== null && !el.disabled &&
+                                            el.getAttribute('aria-disabled') !== 'true') {
                                             window.__antiAutoConnected = true;
                                             el.click();
                                             return true;
@@ -291,8 +301,39 @@ fun WebViewContainer(
                                 setTimeout(function() { obs.disconnect(); }, 15000);
                             })();
                             """.trimIndent()
-                            evaluateJavascript(jsAutoConnect, null)
+                            view?.evaluateJavascript(jsAutoConnect, null)
                         }
+                    }
+
+                    override fun onReceivedError(
+                        view: WebView?,
+                        request: WebResourceRequest?,
+                        error: WebResourceError?
+                    ) {
+                        if (request?.isForMainFrame == true) {
+                            Toast.makeText(context, "Unable to load the remote page. Try Reload.", Toast.LENGTH_LONG).show()
+                        }
+                    }
+
+                    override fun onReceivedHttpError(
+                        view: WebView?,
+                        request: WebResourceRequest?,
+                        errorResponse: WebResourceResponse?
+                    ) {
+                        if (request?.isForMainFrame == true && (errorResponse?.statusCode ?: 200) >= 400) {
+                            Toast.makeText(context, "Remote page returned an error. Try Reload.", Toast.LENGTH_LONG).show()
+                        }
+                    }
+
+                    override fun onRenderProcessGone(
+                        view: WebView?,
+                        detail: RenderProcessGoneDetail?
+                    ): Boolean {
+                        view?.stopLoading()
+                        view?.destroy()
+                        Toast.makeText(context, "WebView restarted after a renderer failure.", Toast.LENGTH_LONG).show()
+                        onRendererCrashed()
+                        return true
                     }
 
                     override fun shouldOverrideUrlLoading(
@@ -301,8 +342,8 @@ fun WebViewContainer(
                     ): Boolean = false
                 }
 
-                loadUrl(url)
                 onWebViewCreated(this)
+                loadUrl(url)
             }
         },
         update = { /* Recreated on key(accountId) */ }

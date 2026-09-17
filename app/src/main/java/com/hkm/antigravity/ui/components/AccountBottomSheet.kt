@@ -18,7 +18,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.hkm.antigravity.data.model.Account
-import com.hkm.antigravity.ui.theme.AccentBlue
 import com.hkm.antigravity.ui.theme.Lucide
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -91,7 +90,7 @@ fun AccountBottomSheet(
                     val color = try {
                         Color(android.graphics.Color.parseColor(account.colorHex))
                     } catch (e: Exception) {
-                        AccentBlue
+                        MaterialTheme.colorScheme.primary
                     }
 
                     Row(

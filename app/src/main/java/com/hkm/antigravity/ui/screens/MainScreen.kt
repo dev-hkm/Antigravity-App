@@ -38,6 +38,7 @@ fun MainScreen(
     val settings by settingsRepository.settingsFlow.collectAsState()
 
     var webViewInstance by remember { mutableStateOf<WebView?>(null) }
+    var webViewGeneration by remember { mutableIntStateOf(0) }
     var currentUrl by remember { mutableStateOf(activeAccount?.url ?: AccountRepository.DEFAULT_REMOTE_URL) }
     var pageProgress by remember { mutableIntStateOf(0) }
 
@@ -77,11 +78,12 @@ fun MainScreen(
         }
     }
 
-    val activeColor = remember(activeAccount) {
+    val fallbackAccent = MaterialTheme.colorScheme.primary
+    val activeColor = remember(activeAccount, fallbackAccent) {
         try {
             Color(android.graphics.Color.parseColor(activeAccount?.colorHex ?: "#3b82f6"))
         } catch (e: Exception) {
-            AccentBlue
+            fallbackAccent
         }
     }
 
@@ -94,7 +96,7 @@ fun MainScreen(
         val targetUrl = activeAccount?.url ?: AccountRepository.DEFAULT_REMOTE_URL
 
         // Web view taking 100% full screen with IME & navigation bar padding
-        key(accountId) {
+        key(accountId, webViewGeneration) {
             WebViewContainer(
                 modifier = Modifier
                     .fillMaxSize()
@@ -114,6 +116,10 @@ fun MainScreen(
                 onTitleChange = { /* Title update */ },
                 onUrlChange = { url ->
                     currentUrl = url
+                },
+                onRendererCrashed = {
+                    webViewInstance = null
+                    webViewGeneration++
                 },
                 onShowFileChooser = { callback, params ->
                     filePathCallback?.onReceiveValue(null)
@@ -181,10 +187,7 @@ fun MainScreen(
             activeAccount = activeAccount,
             onDismiss = { showAccountSheet = false },
             onSelectAccount = { target ->
-                val newAcc = accountRepository.switchAccount(target.id)
-                if (newAcc != null) {
-                    webViewInstance?.loadUrl(newAcc.url)
-                }
+                accountRepository.switchAccount(target.id)
             },
             onAddAccountClick = {
                 accountToEdit = null

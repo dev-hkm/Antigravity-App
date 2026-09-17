@@ -31,7 +31,7 @@ class SettingsRepository(context: Context) {
         } else {
             AppSettings()
         }
-        _settingsFlow.value = loaded
+        _settingsFlow.value = loaded.normalized()
     }
 
     private fun saveSettings(settings: AppSettings) {
@@ -89,6 +89,25 @@ class SettingsRepository(context: Context) {
             showReloadOnPill = showReload,
             showSettingsOnPill = showSettings
         ))
+    }
+
+    private fun AppSettings.normalized(): AppSettings {
+        val safeThemeMode = runCatching { themeMode }.getOrNull()
+            ?.takeIf { it in setOf("system", "dark", "light") } ?: "system"
+        val safeWebTheme = runCatching { webTheme }.getOrNull()
+            ?.takeIf { it in setOf("dark", "light", "follow_app") } ?: "dark"
+        val safeOrientation = runCatching { pillOrientation }.getOrNull()
+            ?.takeIf { it in setOf("horizontal", "vertical") } ?: "horizontal"
+        val safeScale = runCatching { pillScale }.getOrNull()
+            ?.takeIf { it in setOf("compact", "standard", "large") } ?: "standard"
+        val safeOpacity = runCatching { pillOpacity.coerceIn(0.35f, 1f) }.getOrDefault(0.90f)
+        return copy(
+            themeMode = safeThemeMode,
+            webTheme = safeWebTheme,
+            pillOrientation = safeOrientation,
+            pillScale = safeScale,
+            pillOpacity = safeOpacity
+        )
     }
 
     companion object {

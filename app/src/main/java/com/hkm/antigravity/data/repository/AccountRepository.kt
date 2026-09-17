@@ -2,6 +2,7 @@ package com.hkm.antigravity.data.repository
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.net.Uri
 import android.webkit.CookieManager
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
@@ -28,11 +29,21 @@ class AccountRepository(private val context: Context) {
     private fun loadData() {
         val json = prefs.getString(KEY_ACCOUNTS, null)
         var list: MutableList<Account> = if (!json.isNullOrEmpty()) {
-            val type = object : TypeToken<MutableList<Account>>() {}.type
-            gson.fromJson(json, type) ?: mutableListOf()
+            try {
+                val type = object : TypeToken<MutableList<Account>>() {}.type
+                gson.fromJson(json, type) ?: mutableListOf()
+            } catch (_: Exception) {
+                mutableListOf()
+            }
         } else {
             mutableListOf()
         }
+
+        list = list.mapNotNull { account ->
+            runCatching {
+                account.takeIf { it.id.isNotBlank() && it.url.isNotBlank() }
+            }.getOrNull()
+        }.toMutableList()
 
         // Auto-migrate any old URLs to the official remote dashboard
         list = list.map { acc ->
@@ -59,6 +70,7 @@ class AccountRepository(private val context: Context) {
         val savedActiveId = prefs.getString(KEY_ACTIVE_ID, null)
         val active = list.find { it.id == savedActiveId } ?: list.first()
         _activeAccountFlow.value = active
+        prefs.edit().putString(KEY_ACTIVE_ID, active.id).apply()
     }
 
     private fun saveAccountsList(list: List<Account>) {
@@ -79,12 +91,7 @@ class AccountRepository(private val context: Context) {
     }
 
     fun createAccount(name: String, colorHex: String, url: String): Account {
-        val cleanUrl = url.trim().ifBlank { DEFAULT_REMOTE_URL }
-        val targetUrl = if (cleanUrl.contains("antigravity.google/remote") || cleanUrl == "https://antigravity.google") {
-            DEFAULT_REMOTE_URL
-        } else {
-            cleanUrl
-        }
+        val targetUrl = normalizeUrl(url)
 
         val newAcc = Account(
             id = "acc_" + System.currentTimeMillis(),
@@ -105,12 +112,7 @@ class AccountRepository(private val context: Context) {
         val currentList = _accountsFlow.value.toMutableList()
         val index = currentList.indexOfFirst { it.id == id }
         if (index != -1) {
-            val cleanUrl = url.trim().ifBlank { DEFAULT_REMOTE_URL }
-            val targetUrl = if (cleanUrl.contains("antigravity.google/remote") || cleanUrl == "https://antigravity.google") {
-                DEFAULT_REMOTE_URL
-            } else {
-                cleanUrl
-            }
+            val targetUrl = normalizeUrl(url)
 
             val updated = currentList[index].copy(
                 name = name.ifBlank { currentList[index].name },
@@ -126,6 +128,20 @@ class AccountRepository(private val context: Context) {
             return updated
         }
         return null
+    }
+
+    private fun normalizeUrl(rawUrl: String): String {
+        val cleanUrl = rawUrl.trim()
+        if (cleanUrl.isBlank()) return DEFAULT_REMOTE_URL
+        val parsed = runCatching { Uri.parse(cleanUrl) }.getOrNull()
+        if (parsed == null || parsed.scheme !in setOf("http", "https") || parsed.host.isNullOrBlank()) {
+            return DEFAULT_REMOTE_URL
+        }
+        return if (cleanUrl.contains("antigravity.google/remote") || cleanUrl == "https://antigravity.google") {
+            DEFAULT_REMOTE_URL
+        } else {
+            cleanUrl
+        }
     }
 
     fun deleteAccount(id: String): Boolean {

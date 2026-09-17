@@ -44,6 +44,9 @@ fun SettingsBottomSheet(
 ) {
     val context = LocalContext.current
     val haptic = LocalHapticFeedback.current
+    val appVersion = androidx.compose.runtime.remember {
+        context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "unknown"
+    }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -408,7 +411,7 @@ fun SettingsBottomSheet(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Text(
-                    text = "v1.3.4 • Signed Release",
+                        text = "v$appVersion • Signed Release",
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Medium,
                     color = MaterialTheme.colorScheme.primary

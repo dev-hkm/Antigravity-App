@@ -135,7 +135,7 @@ fun AccountDialog(
                 if (accountToEdit != null && canDelete) {
                     TextButton(
                         onClick = onDelete,
-                        colors = ButtonDefaults.textButtonColors(contentColor = DangerRed)
+                        colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
                     ) {
                         Text("Delete")
                     }
