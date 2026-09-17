@@ -24,7 +24,8 @@ fun WebViewContainer(
     modifier: Modifier = Modifier,
     accountId: String,
     url: String,
-    themeMode: String = "system",
+    appThemeMode: String = "system",
+    webTheme: String = "dark", // "dark", "light", "follow_app"
     isDesktopMode: Boolean = false,
     autoConnect: Boolean = true,
     onWebViewCreated: (WebView) -> Unit,
@@ -34,16 +35,78 @@ fun WebViewContainer(
     onShowFileChooser: (ValueCallback<Array<Uri>>?, WebChromeClient.FileChooserParams?) -> Boolean
 ) {
     val systemDark = isSystemInDarkTheme()
-    val isDark = when (themeMode) {
+    val isWebDark = when (webTheme) {
         "dark" -> true
         "light" -> false
-        else -> systemDark
+        else -> when (appThemeMode) {
+            "dark" -> true
+            "light" -> false
+            else -> systemDark
+        }
     }
 
     var webViewRef by remember { mutableStateOf<WebView?>(null) }
 
-    // Dynamic web theme synchronization
-    fun applyThemeToWeb(view: WebView, dark: Boolean) {
+    // Optimization CSS for mobile: kills laggy backdrop-filters, accelerates input & model picker
+    fun injectWebOptimizations(view: WebView, dark: Boolean) {
+        val bgHex = if (dark) "#0C0E14" else "#FFFFFF"
+        val surfaceHex = if (dark) "#141721" else "#F1F5F9"
+        val textHex = if (dark) "#F1F5F9" else "#0F172A"
+        val borderHex = if (dark) "#242A38" else "#E2E8F0"
+
+        val optScript = """
+        (function() {
+            var dark = $isWebDark;
+            document.documentElement.classList.toggle('dark', dark);
+            document.documentElement.classList.toggle('theme-dark', dark);
+            document.documentElement.classList.toggle('light', !dark);
+            document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+            document.documentElement.style.colorScheme = dark ? 'dark' : 'light';
+            try {
+                localStorage.setItem('theme', dark ? 'dark' : 'light');
+                localStorage.setItem('antigravity_theme', dark ? 'dark' : 'light');
+                localStorage.setItem('themeMode', dark ? 'dark' : 'light');
+            } catch(e) {}
+
+            var styleId = 'antigravity-native-enhancements';
+            var style = document.getElementById(styleId);
+            if (!style) {
+                style = document.createElement('style');
+                style.id = styleId;
+                document.head.appendChild(style);
+            }
+            style.innerHTML = `
+                /* 1. Eliminate heavy backdrop-blur that causes typing lag on mobile */
+                body, html {
+                    background-color: $bgHex !important;
+                    color: $textHex !important;
+                    -webkit-font-smoothing: antialiased;
+                }
+                /* Hardware accelerate bottom input and chat container */
+                [role="textbox"], textarea, input {
+                    font-size: 15px !important;
+                    transform: translateZ(0) !important;
+                    -webkit-transform: translateZ(0) !important;
+                }
+                /* Optimize model selection pill */
+                [role="combobox"], [aria-haspopup="listbox"], button[class*="model"], div[class*="model"] {
+                    min-height: 38px !important;
+                    cursor: pointer !important;
+                    -webkit-tap-highlight-color: transparent !important;
+                    transform: translateZ(0) !important;
+                }
+                /* Smooth touch scrolling */
+                * {
+                    -webkit-overflow-scrolling: touch !important;
+                }
+            `;
+        })();
+        """.trimIndent()
+
+        view.evaluateJavascript(optScript, null)
+    }
+
+    fun applyThemeSettings(view: WebView, dark: Boolean) {
         try {
             if (WebViewFeature.isFeatureSupported(WebViewFeature.ALGORITHMIC_DARKENING)) {
                 WebSettingsCompat.setAlgorithmicDarkeningAllowed(view.settings, dark)
@@ -55,29 +118,19 @@ fun WebViewContainer(
                 )
             }
         } catch (e: Exception) {
-            Log.e("WebViewContainer", "Error applying dark mode settings: ${e.message}")
+            Log.e("WebViewContainer", "Error applying theme settings: ${e.message}")
         }
 
-        // Web background color to prevent flash
         view.setBackgroundColor(if (dark) AndroidColor.parseColor("#0C0E14") else AndroidColor.parseColor("#FFFFFF"))
+        injectWebOptimizations(view, dark)
+    }
 
-        // Inject script to enforce web classes and color-scheme
-        val jsTheme = """
-        (function() {
-            var dark = $dark;
-            document.documentElement.classList.toggle('dark', dark);
-            document.documentElement.classList.toggle('theme-dark', dark);
-            document.documentElement.classList.toggle('light', !dark);
-            document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
-            document.documentElement.style.colorScheme = dark ? 'dark' : 'light';
-            try {
-                localStorage.setItem('theme', dark ? 'dark' : 'light');
-                localStorage.setItem('antigravity_theme', dark ? 'dark' : 'light');
-                localStorage.setItem('themeMode', dark ? 'dark' : 'light');
-            } catch(e) {}
-        })();
-        """.trimIndent()
-        view.evaluateJavascript(jsTheme, null)
+    // React to Web Theme change and reload cleanly
+    LaunchedEffect(isWebDark) {
+        webViewRef?.let {
+            applyThemeSettings(it, isWebDark)
+            it.reload()
+        }
     }
 
     // Apply Desktop / Mobile User-Agent
@@ -100,11 +153,7 @@ fun WebViewContainer(
         }
     }
 
-    LaunchedEffect(isDark, webViewRef) {
-        webViewRef?.let { applyThemeToWeb(it, isDark) }
-    }
-
-    LaunchedEffect(isDesktopMode, webViewRef) {
+    LaunchedEffect(isDesktopMode) {
         webViewRef?.let {
             applyDesktopMode(it, isDesktopMode)
             it.reload()
@@ -121,7 +170,7 @@ fun WebViewContainer(
                     ViewGroup.LayoutParams.MATCH_PARENT
                 )
 
-                // Assign isolated profile if supported on device (MUST be called before any loadUrl)
+                // Assign isolated profile if supported on device
                 if (WebViewFeature.isFeatureSupported(WebViewFeature.MULTI_PROFILE)) {
                     try {
                         val profileName = "account_$accountId"
@@ -149,10 +198,9 @@ fun WebViewContainer(
                     setGeolocationEnabled(true)
                 }
 
-                applyThemeToWeb(this, isDark)
+                applyThemeSettings(this, isWebDark)
                 applyDesktopMode(this, isDesktopMode)
 
-                // Cookie manager configuration
                 val cookieManager = CookieManager.getInstance()
                 cookieManager.setAcceptCookie(true)
                 cookieManager.setAcceptThirdPartyCookies(this, true)
@@ -182,7 +230,7 @@ fun WebViewContainer(
                         if (!url.isNullOrEmpty()) {
                             onUrlChange(url)
                         }
-                        view?.let { applyThemeToWeb(it, isDark) }
+                        view?.let { injectWebOptimizations(it, isWebDark) }
                     }
 
                     override fun onPageFinished(view: WebView?, finishedUrl: String?) {
@@ -192,9 +240,9 @@ fun WebViewContainer(
                         onProgressChange(100)
                         CookieManager.getInstance().flush()
 
-                        view?.let { applyThemeToWeb(it, isDark) }
+                        view?.let { injectWebOptimizations(it, isWebDark) }
 
-                        // Auto-connect injection when on instances list
+                        // Auto-connect injection
                         if (autoConnect && finishedUrl != null && finishedUrl.contains("antigravity.google.com")) {
                             val jsAutoConnect = """
                             (function() {
@@ -238,7 +286,7 @@ fun WebViewContainer(
                         view: WebView?,
                         request: WebResourceRequest?
                     ): Boolean {
-                        return false // Keep browsing inside WebView
+                        return false
                     }
                 }
 
@@ -247,7 +295,7 @@ fun WebViewContainer(
             }
         },
         update = {
-            // No-op for profile; key(accountId) recreates the view cleanly
+            // Recreated when key(accountId) changes
         }
     )
 }

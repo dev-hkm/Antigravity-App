@@ -47,6 +47,10 @@ class SettingsRepository(context: Context) {
         saveSettings(_settingsFlow.value.copy(themeMode = mode))
     }
 
+    fun setWebTheme(mode: String) {
+        saveSettings(_settingsFlow.value.copy(webTheme = mode))
+    }
+
     fun setDynamicColor(enabled: Boolean) {
         saveSettings(_settingsFlow.value.copy(dynamicColor = enabled))
     }
@@ -57,6 +61,30 @@ class SettingsRepository(context: Context) {
 
     fun setDefaultZenMode(enabled: Boolean) {
         saveSettings(_settingsFlow.value.copy(defaultZenMode = enabled))
+    }
+
+    fun setPillOrientation(orientation: String) {
+        saveSettings(_settingsFlow.value.copy(pillOrientation = orientation))
+    }
+
+    fun setPillScale(scale: String) {
+        saveSettings(_settingsFlow.value.copy(pillScale = scale))
+    }
+
+    fun setToolbarButtons(
+        showAccount: Boolean = _settingsFlow.value.showAccountOnPill,
+        showDesktop: Boolean = _settingsFlow.value.showDesktopOnPill,
+        showWebTheme: Boolean = _settingsFlow.value.showWebThemeOnPill,
+        showReload: Boolean = _settingsFlow.value.showReloadOnPill,
+        showSettings: Boolean = _settingsFlow.value.showSettingsOnPill
+    ) {
+        saveSettings(_settingsFlow.value.copy(
+            showAccountOnPill = showAccount,
+            showDesktopOnPill = showDesktop,
+            showWebThemeOnPill = showWebTheme,
+            showReloadOnPill = showReload,
+            showSettingsOnPill = showSettings
+        ))
     }
 
     companion object {

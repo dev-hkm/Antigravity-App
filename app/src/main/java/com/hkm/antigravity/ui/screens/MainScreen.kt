@@ -103,7 +103,8 @@ fun MainScreen(
                     .statusBarsPadding(),
                 accountId = accountId,
                 url = targetUrl,
-                themeMode = settings.themeMode,
+                appThemeMode = settings.themeMode,
+                webTheme = settings.webTheme,
                 isDesktopMode = settings.isDesktopMode,
                 autoConnect = settings.autoConnect,
                 onWebViewCreated = { webView ->
@@ -147,13 +148,25 @@ fun MainScreen(
             )
         }
 
-        // Draggable & Dockable Floating Action Pill (Can be moved anywhere, never obstructs buttons)
+        // Draggable & Dockable Action Pill with deep customization
         DraggableActionPill(
             accountColor = activeColor,
             isDesktopMode = settings.isDesktopMode,
+            webTheme = settings.webTheme,
+            orientation = settings.pillOrientation,
+            scale = settings.pillScale,
+            showAccount = settings.showAccountOnPill,
+            showDesktop = settings.showDesktopOnPill,
+            showWebTheme = settings.showWebThemeOnPill,
+            showReload = settings.showReloadOnPill,
+            showSettings = settings.showSettingsOnPill,
             onAccountClick = { showAccountSheet = true },
             onToggleDesktopMode = {
                 settingsRepository.setDesktopMode(!settings.isDesktopMode)
+            },
+            onToggleWebTheme = {
+                val next = if (settings.webTheme == "dark") "light" else "dark"
+                settingsRepository.setWebTheme(next)
             },
             onReloadClick = { webViewInstance?.reload() },
             onSettingsClick = { showSettingsSheet = true }
@@ -194,11 +207,23 @@ fun MainScreen(
             onUpdateThemeMode = { mode ->
                 settingsRepository.setThemeMode(mode)
             },
+            onUpdateWebTheme = { mode ->
+                settingsRepository.setWebTheme(mode)
+            },
             onUpdateDynamicColor = { enabled ->
                 settingsRepository.setDynamicColor(enabled)
             },
             onUpdateDesktopMode = { enabled ->
                 settingsRepository.setDesktopMode(enabled)
+            },
+            onUpdatePillOrientation = { orientation ->
+                settingsRepository.setPillOrientation(orientation)
+            },
+            onUpdatePillScale = { scale ->
+                settingsRepository.setPillScale(scale)
+            },
+            onUpdateToolbarButtons = { showAcc, showDesk, showWeb, showRel, showSet ->
+                settingsRepository.setToolbarButtons(showAcc, showDesk, showWeb, showRel, showSet)
             },
             onClearCache = {
                 webViewInstance?.clearCache(true)

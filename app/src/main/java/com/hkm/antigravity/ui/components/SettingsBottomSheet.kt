@@ -2,12 +2,14 @@ package com.hkm.antigravity.ui.components
 
 import android.os.Build
 import android.widget.Toast
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -32,8 +34,12 @@ fun SettingsBottomSheet(
     onDismiss: () -> Unit,
     onUpdateAutoConnect: (Boolean) -> Unit,
     onUpdateThemeMode: (String) -> Unit,
+    onUpdateWebTheme: (String) -> Unit,
     onUpdateDynamicColor: (Boolean) -> Unit,
     onUpdateDesktopMode: (Boolean) -> Unit,
+    onUpdatePillOrientation: (String) -> Unit,
+    onUpdatePillScale: (String) -> Unit,
+    onUpdateToolbarButtons: (showAccount: Boolean, showDesktop: Boolean, showWebTheme: Boolean, showReload: Boolean, showSettings: Boolean) -> Unit,
     onClearCache: () -> Unit
 ) {
     val context = LocalContext.current
@@ -42,6 +48,7 @@ fun SettingsBottomSheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         containerColor = MaterialTheme.colorScheme.surface,
+        contentColor = MaterialTheme.colorScheme.onSurface,
         dragHandle = {
             BottomSheetDefaults.DragHandle(color = MaterialTheme.colorScheme.outlineVariant)
         }
@@ -50,7 +57,8 @@ fun SettingsBottomSheet(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 20.dp)
-                .padding(bottom = 32.dp)
+                .verticalScroll(rememberScrollState())
+                .padding(bottom = 36.dp)
         ) {
             // Header
             Row(
@@ -59,7 +67,7 @@ fun SettingsBottomSheet(
             ) {
                 Box(
                     modifier = Modifier
-                        .size(38.dp)
+                        .size(42.dp)
                         .clip(CircleShape)
                         .background(MaterialTheme.colorScheme.primaryContainer),
                     contentAlignment = Alignment.Center
@@ -67,160 +75,318 @@ fun SettingsBottomSheet(
                     Icon(
                         imageVector = Lucide.Settings,
                         contentDescription = "Settings",
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(20.dp)
+                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                        modifier = Modifier.size(22.dp)
                     )
                 }
-                Spacer(modifier = Modifier.width(12.dp))
+                Spacer(modifier = Modifier.width(14.dp))
                 Column {
                     Text(
                         text = "Settings",
-                        fontSize = 18.sp,
+                        fontSize = 20.sp,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     Text(
-                        text = "Fine-tune your Antigravity companion experience",
+                        text = "Customize your Antigravity companion experience",
                         fontSize = 12.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
 
-            // Section: REMOTE SESSION
-            SettingsSectionHeader(title = "REMOTE CONNECTION")
-            
-            SettingsSwitchItem(
-                icon = Lucide.Bolt,
-                title = "Auto-Connect",
-                subtitle = "Automatically click Connect on instance list",
-                checked = settings.autoConnect,
-                onCheckedChange = {
-                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                    onUpdateAutoConnect(it)
-                }
-            )
+            // Section 1: WEB THEME (ANTIGRAVITY WEB)
+            SettingsSectionHeader(title = "WEB THEME (ANTIGRAVITY WEB)")
 
-            Spacer(modifier = Modifier.height(10.dp))
-
-            // Desktop View Mode (Feature #3)
-            SettingsSwitchItem(
-                icon = Lucide.Monitor,
-                title = "Desktop View Mode",
-                subtitle = "Wide layout for reviewing code diffs and terminal",
-                checked = settings.isDesktopMode,
-                onCheckedChange = {
-                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                    onUpdateDesktopMode(it)
-                }
-            )
-
-            Spacer(modifier = Modifier.height(20.dp))
-
-            // Section: APPEARANCE
-            SettingsSectionHeader(title = "APPEARANCE & THEME")
-
-            // Dynamic Color Toggle (Android 12+)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                SettingsSwitchItem(
-                    icon = Lucide.Sparkles,
-                    title = "Dynamic Color (Material You)",
-                    subtitle = "Harmonize app colors with device wallpaper",
-                    checked = settings.dynamicColor,
-                    onCheckedChange = {
-                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                        onUpdateDynamicColor(it)
-                    }
-                )
-                Spacer(modifier = Modifier.height(10.dp))
-            }
-
-            // Theme Selector Row (System / Dark / Light)
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(14.dp))
-                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
-                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(14.dp))
-                    .padding(4.dp),
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            OutlinedCard(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                colors = CardDefaults.outlinedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
             ) {
-                ThemeOptionButton(
-                    modifier = Modifier.weight(1f),
-                    title = "System",
-                    icon = Lucide.Sparkles,
-                    isSelected = settings.themeMode == "system",
-                    onClick = {
-                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                        onUpdateThemeMode("system")
-                    }
-                )
-                ThemeOptionButton(
-                    modifier = Modifier.weight(1f),
-                    title = "Dark",
-                    icon = Lucide.Moon,
-                    isSelected = settings.themeMode == "dark",
-                    onClick = {
-                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                        onUpdateThemeMode("dark")
-                    }
-                )
-                ThemeOptionButton(
-                    modifier = Modifier.weight(1f),
-                    title = "Light",
-                    icon = Lucide.Sun,
-                    isSelected = settings.themeMode == "light",
-                    onClick = {
-                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                        onUpdateThemeMode("light")
-                    }
-                )
-            }
-
-            Spacer(modifier = Modifier.height(20.dp))
-
-            // Section: DATA & STORAGE
-            SettingsSectionHeader(title = "DATA & STORAGE")
-
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(14.dp))
-                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
-                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(14.dp))
-                    .clickable {
-                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                        onClearCache()
-                        Toast.makeText(context, "WebView cache cleared", Toast.LENGTH_SHORT).show()
-                    }
-                    .padding(14.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(
-                    imageVector = Lucide.Trash,
-                    contentDescription = "Clear Cache",
-                    tint = DangerRed,
-                    modifier = Modifier.size(22.dp)
-                )
-                Spacer(modifier = Modifier.width(12.dp))
-                Column(modifier = Modifier.weight(1f)) {
+                Column(modifier = Modifier.padding(14.dp)) {
                     Text(
-                        text = "Clear WebView Cache",
+                        text = "Web Interface Mode",
                         fontSize = 14.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     Text(
-                        text = "Free up memory without logging out accounts",
+                        text = "Controls the theme of Antigravity web view directly",
                         fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(bottom = 12.dp)
                     )
+
+                    SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                        val webOptions = listOf("dark" to "Dark", "light" to "Light", "follow_app" to "Follow App")
+                        webOptions.forEachIndexed { index, (key, label) ->
+                            SegmentedButton(
+                                selected = settings.webTheme == key,
+                                onClick = {
+                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    onUpdateWebTheme(key)
+                                },
+                                shape = SegmentedButtonDefaults.itemShape(index = index, count = webOptions.size),
+                                icon = {
+                                    SegmentedButtonDefaults.Icon(active = settings.webTheme == key)
+                                }
+                            ) {
+                                Text(label, fontSize = 12.sp)
+                            }
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(18.dp))
+
+            // Section 2: APP THEME & DYNAMIC COLOR
+            SettingsSectionHeader(title = "APP THEME & APPEARANCE")
+
+            OutlinedCard(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                colors = CardDefaults.outlinedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
+            ) {
+                Column(modifier = Modifier.padding(14.dp)) {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                        SettingsRowSwitch(
+                            icon = Lucide.Sparkles,
+                            title = "Dynamic Color (Material You)",
+                            subtitle = "Harmonize app colors with device wallpaper",
+                            checked = settings.dynamicColor,
+                            onCheckedChange = {
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                onUpdateDynamicColor(it)
+                            }
+                        )
+                        HorizontalDivider(
+                            modifier = Modifier.padding(vertical = 12.dp),
+                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                        )
+                    }
+
+                    Text(
+                        text = "App Shell Theme",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = "Theme for dialogs, settings and companion menus",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(bottom = 12.dp)
+                    )
+
+                    SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                        val appOptions = listOf("system" to "System", "dark" to "Dark", "light" to "Light")
+                        appOptions.forEachIndexed { index, (key, label) ->
+                            SegmentedButton(
+                                selected = settings.themeMode == key,
+                                onClick = {
+                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    onUpdateThemeMode(key)
+                                },
+                                shape = SegmentedButtonDefaults.itemShape(index = index, count = appOptions.size),
+                                icon = {
+                                    SegmentedButtonDefaults.Icon(active = settings.themeMode == key)
+                                }
+                            ) {
+                                Text(label, fontSize = 12.sp)
+                            }
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(18.dp))
+
+            // Section 3: TOOLBAR CUSTOMIZATION
+            SettingsSectionHeader(title = "TOOLBAR PILL CUSTOMIZATION")
+
+            OutlinedCard(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                colors = CardDefaults.outlinedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
+            ) {
+                Column(modifier = Modifier.padding(14.dp)) {
+                    Text(
+                        text = "Pill Orientation",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                        val orientations = listOf("horizontal" to "Horizontal", "vertical" to "Vertical")
+                        orientations.forEachIndexed { index, (key, label) ->
+                            SegmentedButton(
+                                selected = settings.pillOrientation == key,
+                                onClick = {
+                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    onUpdatePillOrientation(key)
+                                },
+                                shape = SegmentedButtonDefaults.itemShape(index = index, count = orientations.size),
+                                icon = {
+                                    SegmentedButtonDefaults.Icon(active = settings.pillOrientation == key)
+                                }
+                            ) {
+                                Text(label, fontSize = 12.sp)
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    Text(
+                        text = "Pill Size / Scale",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                        val scales = listOf("compact" to "Compact", "standard" to "Standard", "large" to "Large")
+                        scales.forEachIndexed { index, (key, label) ->
+                            SegmentedButton(
+                                selected = settings.pillScale == key,
+                                onClick = {
+                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    onUpdatePillScale(key)
+                                },
+                                shape = SegmentedButtonDefaults.itemShape(index = index, count = scales.size),
+                                icon = {
+                                    SegmentedButtonDefaults.Icon(active = settings.pillScale == key)
+                                }
+                            ) {
+                                Text(label, fontSize = 12.sp)
+                            }
+                        }
+                    }
+
+                    HorizontalDivider(
+                        modifier = Modifier.padding(vertical = 12.dp),
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                    )
+
+                    Text(
+                        text = "Visible Toolbar Actions",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(bottom = 6.dp)
+                    )
+
+                    PillActionToggleRow("Account Switcher", settings.showAccountOnPill) {
+                        onUpdateToolbarButtons(it, settings.showDesktopOnPill, settings.showWebThemeOnPill, settings.showReloadOnPill, settings.showSettingsOnPill)
+                    }
+                    PillActionToggleRow("Desktop Mode Toggle", settings.showDesktopOnPill) {
+                        onUpdateToolbarButtons(settings.showAccountOnPill, it, settings.showWebThemeOnPill, settings.showReloadOnPill, settings.showSettingsOnPill)
+                    }
+                    PillActionToggleRow("Web Theme Switcher", settings.showWebThemeOnPill) {
+                        onUpdateToolbarButtons(settings.showAccountOnPill, settings.showDesktopOnPill, it, settings.showReloadOnPill, settings.showSettingsOnPill)
+                    }
+                    PillActionToggleRow("Reload Button", settings.showReloadOnPill) {
+                        onUpdateToolbarButtons(settings.showAccountOnPill, settings.showDesktopOnPill, settings.showWebThemeOnPill, it, settings.showSettingsOnPill)
+                    }
+                    PillActionToggleRow("Settings Button", settings.showSettingsOnPill) {
+                        onUpdateToolbarButtons(settings.showAccountOnPill, settings.showDesktopOnPill, settings.showWebThemeOnPill, settings.showReloadOnPill, it)
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(18.dp))
+
+            // Section 4: REMOTE ENGINE
+            SettingsSectionHeader(title = "REMOTE CONNECTION")
+
+            OutlinedCard(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                colors = CardDefaults.outlinedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
+            ) {
+                Column(modifier = Modifier.padding(14.dp)) {
+                    SettingsRowSwitch(
+                        icon = Lucide.Bolt,
+                        title = "Auto-Connect",
+                        subtitle = "Automatically click Connect on instance list",
+                        checked = settings.autoConnect,
+                        onCheckedChange = {
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            onUpdateAutoConnect(it)
+                        }
+                    )
+
+                    HorizontalDivider(
+                        modifier = Modifier.padding(vertical = 12.dp),
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                    )
+
+                    SettingsRowSwitch(
+                        icon = Lucide.Monitor,
+                        title = "Desktop View Mode",
+                        subtitle = "Wide layout for reviewing code diffs and terminal",
+                        checked = settings.isDesktopMode,
+                        onCheckedChange = {
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            onUpdateDesktopMode(it)
+                        }
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(18.dp))
+
+            // Section 5: DATA & STORAGE
+            SettingsSectionHeader(title = "DATA & STORAGE")
+
+            OutlinedCard(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable {
+                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        onClearCache()
+                        Toast.makeText(context, "WebView cache cleared", Toast.LENGTH_SHORT).show()
+                    },
+                shape = RoundedCornerShape(16.dp),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                colors = CardDefaults.outlinedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
+            ) {
+                Row(
+                    modifier = Modifier.padding(14.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Lucide.Trash,
+                        contentDescription = "Clear Cache",
+                        tint = DangerRed,
+                        modifier = Modifier.size(22.dp)
+                    )
+                    Spacer(modifier = Modifier.width(14.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Clear WebView Cache",
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = "Free up memory without logging out accounts",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
             }
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // Section: About
+            // Version info
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -232,7 +398,7 @@ fun SettingsBottomSheet(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Text(
-                    text = "v1.2.0 • Signed Release",
+                    text = "v1.3.0 • Signed Release",
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Medium,
                     color = MaterialTheme.colorScheme.primary
@@ -255,7 +421,7 @@ private fun SettingsSectionHeader(title: String) {
 }
 
 @Composable
-private fun SettingsSwitchItem(
+private fun SettingsRowSwitch(
     icon: ImageVector,
     title: String,
     subtitle: String,
@@ -263,13 +429,7 @@ private fun SettingsSwitchItem(
     onCheckedChange: (Boolean) -> Unit
 ) {
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
-            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
-            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(14.dp))
-            .clickable { onCheckedChange(!checked) }
-            .padding(14.dp),
+        modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Icon(
@@ -278,7 +438,7 @@ private fun SettingsSwitchItem(
             tint = MaterialTheme.colorScheme.primary,
             modifier = Modifier.size(22.dp)
         )
-        Spacer(modifier = Modifier.width(12.dp))
+        Spacer(modifier = Modifier.width(14.dp))
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = title,
@@ -304,41 +464,35 @@ private fun SettingsSwitchItem(
 }
 
 @Composable
-private fun ThemeOptionButton(
-    modifier: Modifier = Modifier,
+private fun PillActionToggleRow(
     title: String,
-    icon: ImageVector,
-    isSelected: Boolean,
-    onClick: () -> Unit
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit
 ) {
-    val selectedBg = MaterialTheme.colorScheme.surface
-    val contentColor = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-
-    Box(
-        modifier = modifier
-            .clip(RoundedCornerShape(10.dp))
-            .background(if (isSelected) selectedBg else Color.Transparent)
-            .clickable(onClick = onClick)
-            .padding(vertical = 10.dp),
-        contentAlignment = Alignment.Center
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.Center
-        ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = title,
-                tint = contentColor,
-                modifier = Modifier.size(16.dp)
+        Text(
+            text = title,
+            fontSize = 13.sp,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+        Switch(
+            checked = checked,
+            onCheckedChange = onCheckedChange,
+            modifier = Modifier.scale(0.85f),
+            colors = SwitchDefaults.colors(
+                checkedThumbColor = Color.White,
+                checkedTrackColor = MaterialTheme.colorScheme.primary
             )
-            Spacer(modifier = Modifier.width(6.dp))
-            Text(
-                text = title,
-                fontSize = 12.sp,
-                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                color = contentColor
-            )
-        }
+        )
     }
 }
+
+private fun Modifier.scale(scale: Float): Modifier = this.then(
+    Modifier.size((52 * scale).dp, (32 * scale).dp)
+)
