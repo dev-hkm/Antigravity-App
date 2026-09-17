@@ -2,8 +2,8 @@ package com.hkm.antigravity.ui.components
 
 import android.os.Build
 import android.widget.Toast
-import androidx.compose.foundation.background
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -24,6 +24,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.hkm.antigravity.data.model.AppSettings
+import com.hkm.antigravity.ui.theme.AccentBlue
 import com.hkm.antigravity.ui.theme.DangerRed
 import com.hkm.antigravity.ui.theme.Lucide
 
@@ -69,13 +70,13 @@ fun SettingsBottomSheet(
                     modifier = Modifier
                         .size(42.dp)
                         .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.primaryContainer),
+                        .background(AccentBlue.copy(alpha = 0.2f)),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         imageVector = Lucide.Settings,
                         contentDescription = "Settings",
-                        tint = MaterialTheme.colorScheme.primary,
+                        tint = AccentBlue,
                         modifier = Modifier.size(22.dp)
                     )
                 }
@@ -112,7 +113,7 @@ fun SettingsBottomSheet(
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     Text(
-                        text = "Controls the theme of Antigravity web directly",
+                        text = "Changes the live theme of Antigravity web directly",
                         fontSize = 12.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(bottom = 12.dp)
@@ -129,8 +130,9 @@ fun SettingsBottomSheet(
                                 },
                                 shape = SegmentedButtonDefaults.itemShape(index = index, count = webOptions.size),
                                 colors = SegmentedButtonDefaults.colors(
-                                    activeContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                                    activeContentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    activeContainerColor = AccentBlue,
+                                    activeContentColor = Color.White,
+                                    inactiveContainerColor = Color.Transparent,
                                     inactiveContentColor = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             ) {
@@ -194,8 +196,9 @@ fun SettingsBottomSheet(
                                 },
                                 shape = SegmentedButtonDefaults.itemShape(index = index, count = appOptions.size),
                                 colors = SegmentedButtonDefaults.colors(
-                                    activeContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                                    activeContentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    activeContainerColor = AccentBlue,
+                                    activeContentColor = Color.White,
+                                    inactiveContainerColor = Color.Transparent,
                                     inactiveContentColor = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             ) {
@@ -236,8 +239,9 @@ fun SettingsBottomSheet(
                                 },
                                 shape = SegmentedButtonDefaults.itemShape(index = index, count = orientations.size),
                                 colors = SegmentedButtonDefaults.colors(
-                                    activeContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                                    activeContentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    activeContainerColor = AccentBlue,
+                                    activeContentColor = Color.White,
+                                    inactiveContainerColor = Color.Transparent,
                                     inactiveContentColor = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             ) {
@@ -266,8 +270,9 @@ fun SettingsBottomSheet(
                                 },
                                 shape = SegmentedButtonDefaults.itemShape(index = index, count = scales.size),
                                 colors = SegmentedButtonDefaults.colors(
-                                    activeContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                                    activeContentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    activeContainerColor = AccentBlue,
+                                    activeContentColor = Color.White,
+                                    inactiveContainerColor = Color.Transparent,
                                     inactiveContentColor = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             ) {
@@ -285,7 +290,7 @@ fun SettingsBottomSheet(
                         text = "Visible Toolbar Actions",
                         fontSize = 13.sp,
                         fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.primary,
+                        color = AccentBlue,
                         modifier = Modifier.padding(bottom = 6.dp)
                     )
 
@@ -406,10 +411,10 @@ fun SettingsBottomSheet(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Text(
-                    text = "v1.3.1 • Signed Release",
+                    text = "v1.3.2 • Signed Release",
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.primary
+                    color = AccentBlue
                 )
             }
         }
@@ -423,7 +428,7 @@ private fun SettingsSectionHeader(title: String) {
         fontSize = 11.sp,
         fontWeight = FontWeight.Bold,
         letterSpacing = 0.8.sp,
-        color = MaterialTheme.colorScheme.primary,
+        color = AccentBlue,
         modifier = Modifier.padding(bottom = 8.dp, start = 4.dp)
     )
 }
@@ -443,7 +448,7 @@ private fun SettingsRowSwitch(
         Icon(
             imageVector = icon,
             contentDescription = title,
-            tint = MaterialTheme.colorScheme.primary,
+            tint = AccentBlue,
             modifier = Modifier.size(22.dp)
         )
         Spacer(modifier = Modifier.width(14.dp))
@@ -462,7 +467,14 @@ private fun SettingsRowSwitch(
         }
         Switch(
             checked = checked,
-            onCheckedChange = onCheckedChange
+            onCheckedChange = onCheckedChange,
+            colors = SwitchDefaults.colors(
+                checkedThumbColor = Color.White,
+                checkedTrackColor = AccentBlue,
+                uncheckedThumbColor = Color(0xFF94A3B8),
+                uncheckedTrackColor = Color(0xFF1E2434),
+                uncheckedBorderColor = Color(0xFF475569)
+            )
         )
     }
 }
@@ -476,7 +488,7 @@ private fun PillActionToggleRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 4.dp),
+            .padding(vertical = 5.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -487,7 +499,14 @@ private fun PillActionToggleRow(
         )
         Switch(
             checked = checked,
-            onCheckedChange = onCheckedChange
+            onCheckedChange = onCheckedChange,
+            colors = SwitchDefaults.colors(
+                checkedThumbColor = Color.White,
+                checkedTrackColor = AccentBlue,
+                uncheckedThumbColor = Color(0xFF94A3B8),
+                uncheckedTrackColor = Color(0xFF1E2434),
+                uncheckedBorderColor = Color(0xFF475569)
+            )
         )
     }
 }

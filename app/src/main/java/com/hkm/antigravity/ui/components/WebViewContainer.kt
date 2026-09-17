@@ -47,23 +47,31 @@ fun WebViewContainer(
 
     var webViewRef by remember { mutableStateOf<WebView?>(null) }
 
-    // Safe, targeted CSS optimizations for mobile
     fun injectWebOptimizations(view: WebView, dark: Boolean) {
-        val bgHex = if (dark) "#0C0E14" else "#FFFFFF"
-        val textHex = if (dark) "#F1F5F9" else "#0F172A"
+        val bg = if (dark) "#0C0E14" else "#FFFFFF"
+        val surface = if (dark) "#131314" else "#FFFFFF"
+        val onSurface = if (dark) "#E3E3E3" else "#1F1F1F"
+        val surfaceContainer = if (dark) "#1E1F20" else "#F0F4F9"
+        val colorScheme = if (dark) "dark" else "light"
 
         val optScript = """
         (function() {
-            var dark = $isWebDark;
+            var dark = $dark;
+            var scheme = '$colorScheme';
+
+            // 1. Enforce root color-scheme and CSS variables
+            document.documentElement.style.setProperty('color-scheme', scheme, 'important');
+            document.documentElement.setAttribute('data-theme', scheme);
             document.documentElement.classList.toggle('dark', dark);
-            document.documentElement.classList.toggle('theme-dark', dark);
             document.documentElement.classList.toggle('light', !dark);
-            document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
-            document.documentElement.style.colorScheme = dark ? 'dark' : 'light';
+            if (document.body) {
+                document.body.style.setProperty('color-scheme', scheme, 'important');
+            }
+
             try {
-                localStorage.setItem('theme', dark ? 'dark' : 'light');
-                localStorage.setItem('antigravity_theme', dark ? 'dark' : 'light');
-                localStorage.setItem('themeMode', dark ? 'dark' : 'light');
+                localStorage.setItem('theme', scheme);
+                localStorage.setItem('antigravity_theme', scheme);
+                localStorage.setItem('themeMode', scheme);
             } catch(e) {}
 
             var styleId = 'antigravity-native-enhancements';
@@ -73,34 +81,61 @@ fun WebViewContainer(
                 style.id = styleId;
                 document.head.appendChild(style);
             }
+
             style.innerHTML = `
-                body, html {
-                    background-color: $bgHex !important;
-                    color: $textHex !important;
-                    -webkit-font-smoothing: antialiased;
+                :root, html, body {
+                    color-scheme: $colorScheme !important;
+                    --mat-sys-background: $bg !important;
+                    --mat-sys-surface: $surface !important;
+                    --mat-sys-on-surface: $onSurface !important;
+                    --mat-sys-on-background: $onSurface !important;
+                    --mat-sys-surface-container: $surfaceContainer !important;
+                    --gm3-sys-color-background: $bg !important;
+                    --gm3-sys-color-surface: $surface !important;
+                    --gm3-sys-color-on-surface: $onSurface !important;
+                    --og-bar-background: $surface !important;
+                    --og-bar-color: $onSurface !important;
+                    background-color: $bg !important;
+                    color: $onSurface !important;
                 }
-                /* Enlarge Add Context button so it is effortless to tap */
-                button[aria-label*="context" i], button[title*="context" i], button[aria-label*="Add" i] {
-                    min-width: 38px !important;
-                    min-height: 38px !important;
-                    display: inline-flex !important;
-                    align-items: center !important;
-                    justify-content: center !important;
+
+                /* 2. Enlarge Add Context (+) button */
+                button[aria-label*="Context" i], button[aria-label*="Add" i],
+                button[title*="Context" i], button[title*="Add" i],
+                [data-tooltip*="Context" i], [data-tooltip*="Add" i] {
+                    min-width: 44px !important;
+                    min-height: 44px !important;
+                    padding: 8px !important;
+                    transform: scale(1.18) !important;
+                    transform-origin: center center !important;
                 }
-                /* Enlarge Model Selector pill comfortably without interfering with dropdown */
+
+                /* 3. Model selector comfort size */
                 button[aria-haspopup="true"], [role="combobox"] {
-                    min-height: 36px !important;
-                    padding-left: 10px !important;
-                    padding-right: 10px !important;
+                    min-height: 38px !important;
+                    padding-left: 12px !important;
+                    padding-right: 12px !important;
                 }
-                /* Keep model picker and thinking effort menus at high z-index and unblocked */
+
+                /* 4. Keep popups and effort menus on top */
                 [role="menu"], [role="listbox"], [role="dialog"], [data-radix-popper-content-wrapper] {
                     z-index: 999999 !important;
                 }
-                * {
-                    -webkit-overflow-scrolling: touch;
-                }
             `;
+
+            // 5. Synthesize mouse hover for Model Picker on mobile so Thinking Effort submenu expands
+            if (!window.__antiTouchHoverSetup) {
+                window.__antiTouchHoverSetup = true;
+                document.addEventListener('touchstart', function(e) {
+                    var item = e.target.closest('[role="menuitem"], [role="option"], li');
+                    if (item && item.closest('[role="menu"], [role="listbox"], [data-radix-popper-content-wrapper]')) {
+                        var enterEvent = new MouseEvent('mouseenter', { bubbles: true, cancelable: true });
+                        var overEvent = new MouseEvent('mouseover', { bubbles: true, cancelable: true });
+                        item.dispatchEvent(enterEvent);
+                        item.dispatchEvent(overEvent);
+                    }
+                }, { passive: true, capture: true });
+            }
         })();
         """.trimIndent()
 

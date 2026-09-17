@@ -64,9 +64,17 @@ fun DraggableActionPill(
 
     val isVertical = orientation == "vertical"
 
-    // Default placement near upper-right corner
-    var offsetX by remember { mutableFloatStateOf(screenWidthPx - with(density) { (if (isVertical) 60.dp else 190.dp).toPx() }) }
-    var offsetY by remember { mutableFloatStateOf(with(density) { 65.dp.toPx() }) }
+    val pillW = with(density) { (if (isVertical) 52.dp else 190.dp).toPx() }
+    val pillH = with(density) { (if (isVertical) 190.dp else 44.dp).toPx() }
+    val safeMargin = with(density) { 6.dp.toPx() }
+    val minX = safeMargin
+    val maxX = (screenWidthPx - pillW - safeMargin).coerceAtLeast(minX)
+    val minY = with(density) { 32.dp.toPx() }
+    val maxY = (screenHeightPx - pillH - with(density) { 50.dp.toPx() }).coerceAtLeast(minY)
+
+    // Initial position
+    var offsetX by remember { mutableFloatStateOf(maxX - with(density) { 10.dp.toPx() }) }
+    var offsetY by remember { mutableFloatStateOf(with(density) { 70.dp.toPx() }) }
     var isDragging by remember { mutableStateOf(false) }
 
     val pillAlpha by animateFloatAsState(
@@ -78,7 +86,7 @@ fun DraggableActionPill(
     Box(
         modifier = modifier
             .offset { IntOffset(offsetX.roundToInt(), offsetY.roundToInt()) }
-            .pointerInput(Unit) {
+            .pointerInput(orientation, scale) {
                 detectDragGestures(
                     onDragStart = {
                         isDragging = true
@@ -87,25 +95,15 @@ fun DraggableActionPill(
                     onDragEnd = {
                         isDragging = false
                         haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                        // Stays exactly where user drops it, only gently clamp inside screen bounds
-                        val pillW = with(density) { (if (isVertical) 52.dp else 190.dp).toPx() }
-                        val pillH = with(density) { (if (isVertical) 190.dp else 44.dp).toPx() }
-                        val safeMargin = with(density) { 8.dp.toPx() }
-                        val minX = safeMargin
-                        val maxX = (screenWidthPx - pillW - safeMargin).coerceAtLeast(minX)
-                        val minY = with(density) { 36.dp.toPx() }
-                        val maxY = (screenHeightPx - pillH - with(density) { 60.dp.toPx() }).coerceAtLeast(minY)
-
-                        offsetX = offsetX.coerceIn(minX, maxX)
-                        offsetY = offsetY.coerceIn(minY, maxY)
+                        // Stays EXACTLY where dropped!
                     },
                     onDragCancel = {
                         isDragging = false
                     },
                     onDrag = { change, dragAmount ->
                         change.consume()
-                        offsetX += dragAmount.x
-                        offsetY += dragAmount.y
+                        offsetX = (offsetX + dragAmount.x).coerceIn(minX, maxX)
+                        offsetY = (offsetY + dragAmount.y).coerceIn(minY, maxY)
                     }
                 )
             }
@@ -113,13 +111,13 @@ fun DraggableActionPill(
             .shadow(
                 elevation = if (isDragging) 12.dp else 6.dp,
                 shape = RoundedCornerShape(24.dp),
-                spotColor = Color.Black.copy(alpha = 0.35f)
+                spotColor = Color.Black.copy(alpha = 0.4f)
             )
             .clip(RoundedCornerShape(24.dp))
             .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.95f))
             .border(
                 width = 1.dp,
-                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f),
+                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.8f),
                 shape = RoundedCornerShape(24.dp)
             )
             .padding(horizontal = padH, vertical = padV)
