@@ -47,6 +47,14 @@ class SettingsRepository(context: Context) {
         saveSettings(_settingsFlow.value.copy(themeMode = mode))
     }
 
+    fun setDynamicColor(enabled: Boolean) {
+        saveSettings(_settingsFlow.value.copy(dynamicColor = enabled))
+    }
+
+    fun setDesktopMode(enabled: Boolean) {
+        saveSettings(_settingsFlow.value.copy(isDesktopMode = enabled))
+    }
+
     fun setDefaultZenMode(enabled: Boolean) {
         saveSettings(_settingsFlow.value.copy(defaultZenMode = enabled))
     }

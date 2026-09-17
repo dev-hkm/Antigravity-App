@@ -2,16 +2,21 @@ package com.hkm.antigravity.ui.components
 
 import android.annotation.SuppressLint
 import android.graphics.Bitmap
+import android.graphics.Color as AndroidColor
 import android.net.Uri
 import android.util.Log
 import android.view.ViewGroup
 import android.webkit.*
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.webkit.ProfileStore
+import androidx.webkit.WebSettingsCompat
 import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
+
+private const val DESKTOP_UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36"
 
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
@@ -19,6 +24,8 @@ fun WebViewContainer(
     modifier: Modifier = Modifier,
     accountId: String,
     url: String,
+    themeMode: String = "system",
+    isDesktopMode: Boolean = false,
     autoConnect: Boolean = true,
     onWebViewCreated: (WebView) -> Unit,
     onProgressChange: (Int) -> Unit,
@@ -26,10 +33,89 @@ fun WebViewContainer(
     onUrlChange: (String) -> Unit,
     onShowFileChooser: (ValueCallback<Array<Uri>>?, WebChromeClient.FileChooserParams?) -> Boolean
 ) {
+    val systemDark = isSystemInDarkTheme()
+    val isDark = when (themeMode) {
+        "dark" -> true
+        "light" -> false
+        else -> systemDark
+    }
+
+    var webViewRef by remember { mutableStateOf<WebView?>(null) }
+
+    // Dynamic web theme synchronization
+    fun applyThemeToWeb(view: WebView, dark: Boolean) {
+        try {
+            if (WebViewFeature.isFeatureSupported(WebViewFeature.ALGORITHMIC_DARKENING)) {
+                WebSettingsCompat.setAlgorithmicDarkeningAllowed(view.settings, dark)
+            } else if (WebViewFeature.isFeatureSupported(WebViewFeature.FORCE_DARK)) {
+                @Suppress("DEPRECATION")
+                WebSettingsCompat.setForceDark(
+                    view.settings,
+                    if (dark) WebSettingsCompat.FORCE_DARK_ON else WebSettingsCompat.FORCE_DARK_OFF
+                )
+            }
+        } catch (e: Exception) {
+            Log.e("WebViewContainer", "Error applying dark mode settings: ${e.message}")
+        }
+
+        // Web background color to prevent flash
+        view.setBackgroundColor(if (dark) AndroidColor.parseColor("#0C0E14") else AndroidColor.parseColor("#FFFFFF"))
+
+        // Inject script to enforce web classes and color-scheme
+        val jsTheme = """
+        (function() {
+            var dark = $dark;
+            document.documentElement.classList.toggle('dark', dark);
+            document.documentElement.classList.toggle('theme-dark', dark);
+            document.documentElement.classList.toggle('light', !dark);
+            document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+            document.documentElement.style.colorScheme = dark ? 'dark' : 'light';
+            try {
+                localStorage.setItem('theme', dark ? 'dark' : 'light');
+                localStorage.setItem('antigravity_theme', dark ? 'dark' : 'light');
+                localStorage.setItem('themeMode', dark ? 'dark' : 'light');
+            } catch(e) {}
+        })();
+        """.trimIndent()
+        view.evaluateJavascript(jsTheme, null)
+    }
+
+    // Apply Desktop / Mobile User-Agent
+    fun applyDesktopMode(view: WebView, desktop: Boolean) {
+        val settings = view.settings
+        if (desktop) {
+            settings.userAgentString = DESKTOP_UA
+            settings.useWideViewPort = true
+            settings.loadWithOverviewMode = true
+            settings.setSupportZoom(true)
+            settings.builtInZoomControls = true
+            settings.displayZoomControls = false
+        } else {
+            val defaultUA = settings.userAgentString
+            settings.userAgentString = defaultUA
+                .replace("; wv", "")
+                .replace("Version/4.0 ", "")
+            settings.useWideViewPort = true
+            settings.loadWithOverviewMode = true
+        }
+    }
+
+    LaunchedEffect(isDark, webViewRef) {
+        webViewRef?.let { applyThemeToWeb(it, isDark) }
+    }
+
+    LaunchedEffect(isDesktopMode, webViewRef) {
+        webViewRef?.let {
+            applyDesktopMode(it, isDesktopMode)
+            it.reload()
+        }
+    }
+
     AndroidView(
         modifier = modifier,
         factory = { context ->
             WebView(context).apply {
+                webViewRef = this
                 layoutParams = ViewGroup.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,
                     ViewGroup.LayoutParams.MATCH_PARENT
@@ -61,13 +147,10 @@ fun WebViewContainer(
                     allowContentAccess = true
                     mediaPlaybackRequiresUserGesture = false
                     setGeolocationEnabled(true)
-
-                    // Modern desktop/mobile clean UA to allow seamless Google authentication
-                    val defaultUA = userAgentString
-                    userAgentString = defaultUA
-                        .replace("; wv", "")
-                        .replace("Version/4.0 ", "")
                 }
+
+                applyThemeToWeb(this, isDark)
+                applyDesktopMode(this, isDesktopMode)
 
                 // Cookie manager configuration
                 val cookieManager = CookieManager.getInstance()
@@ -99,6 +182,7 @@ fun WebViewContainer(
                         if (!url.isNullOrEmpty()) {
                             onUrlChange(url)
                         }
+                        view?.let { applyThemeToWeb(it, isDark) }
                     }
 
                     override fun onPageFinished(view: WebView?, finishedUrl: String?) {
@@ -107,6 +191,8 @@ fun WebViewContainer(
                         }
                         onProgressChange(100)
                         CookieManager.getInstance().flush()
+
+                        view?.let { applyThemeToWeb(it, isDark) }
 
                         // Auto-connect injection when on instances list
                         if (autoConnect && finishedUrl != null && finishedUrl.contains("antigravity.google.com")) {

@@ -3,16 +3,11 @@ package com.hkm.antigravity.ui.components
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -23,30 +18,24 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.hkm.antigravity.data.model.Account
-import com.hkm.antigravity.ui.theme.*
+import com.hkm.antigravity.ui.theme.AccentBlue
+import com.hkm.antigravity.ui.theme.Lucide
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AccountBottomSheet(
     accounts: List<Account>,
     activeAccount: Account?,
-    isDarkTheme: Boolean = true,
     onDismiss: () -> Unit,
     onSelectAccount: (Account) -> Unit,
     onAddAccountClick: () -> Unit,
     onEditAccountClick: (Account) -> Unit
 ) {
-    val surfaceColor = if (isDarkTheme) SurfaceDark else SurfaceLight
-    val borderColor = if (isDarkTheme) BorderDark else BorderLight
-    val textPrimary = if (isDarkTheme) TextPrimaryDark else TextPrimaryLight
-    val textSecondary = if (isDarkTheme) TextSecondaryDark else TextSecondaryLight
-    val itemBg = if (isDarkTheme) SurfaceElevatedDark else SurfaceElevatedLight
-
     ModalBottomSheet(
         onDismissRequest = onDismiss,
-        containerColor = surfaceColor,
+        containerColor = MaterialTheme.colorScheme.surface,
         dragHandle = {
-            BottomSheetDefaults.DragHandle(color = borderColor)
+            BottomSheetDefaults.DragHandle(color = MaterialTheme.colorScheme.outlineVariant)
         }
     ) {
         Column(
@@ -66,24 +55,24 @@ fun AccountBottomSheet(
                         text = "Accounts",
                         fontSize = 18.sp,
                         fontWeight = FontWeight.Bold,
-                        color = textPrimary
+                        color = MaterialTheme.colorScheme.onSurface
                     )
                     Text(
                         text = "Switch or manage isolated profiles",
                         fontSize = 12.sp,
-                        color = textSecondary
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
 
                 Button(
                     onClick = onAddAccountClick,
-                    colors = ButtonDefaults.buttonColors(containerColor = AccentBlue),
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                     contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
                     shape = RoundedCornerShape(10.dp)
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(
-                            imageVector = Icons.Default.Add,
+                            imageVector = Lucide.Add,
                             contentDescription = "Add",
                             modifier = Modifier.size(16.dp)
                         )
@@ -109,10 +98,13 @@ fun AccountBottomSheet(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(14.dp))
-                            .background(if (isActive) itemBg else surfaceColor)
+                            .background(
+                                if (isActive) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f)
+                                else MaterialTheme.colorScheme.surface
+                            )
                             .border(
                                 width = if (isActive) 1.5.dp else 1.dp,
-                                color = if (isActive) color else borderColor,
+                                color = if (isActive) color else MaterialTheme.colorScheme.outlineVariant,
                                 shape = RoundedCornerShape(14.dp)
                             )
                             .clickable {
@@ -122,7 +114,7 @@ fun AccountBottomSheet(
                             .padding(12.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        // Avatar Initial with border
+                        // Avatar Initial
                         Box(
                             modifier = Modifier
                                 .size(42.dp)
@@ -144,12 +136,12 @@ fun AccountBottomSheet(
                             Text(
                                 text = account.name,
                                 fontWeight = FontWeight.SemiBold,
-                                color = textPrimary,
+                                color = MaterialTheme.colorScheme.onSurface,
                                 fontSize = 15.sp
                             )
                             Text(
                                 text = account.url,
-                                color = textSecondary,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 fontSize = 12.sp,
                                 maxLines = 1
                             )
@@ -161,7 +153,7 @@ fun AccountBottomSheet(
                                 modifier = Modifier.padding(end = 6.dp)
                             ) {
                                 Icon(
-                                    imageVector = Icons.Default.Check,
+                                    imageVector = Lucide.Check,
                                     contentDescription = "Active",
                                     tint = color,
                                     modifier = Modifier.size(16.dp)
@@ -181,9 +173,9 @@ fun AccountBottomSheet(
                             modifier = Modifier.size(32.dp)
                         ) {
                             Icon(
-                                imageVector = Icons.Default.Edit,
+                                imageVector = Lucide.Edit,
                                 contentDescription = "Edit",
-                                tint = textSecondary,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.size(16.dp)
                             )
                         }

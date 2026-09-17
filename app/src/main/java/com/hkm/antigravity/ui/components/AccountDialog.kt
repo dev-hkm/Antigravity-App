@@ -28,7 +28,6 @@ private val colorOptions = listOf(
 fun AccountDialog(
     accountToEdit: Account? = null,
     canDelete: Boolean = false,
-    isDarkTheme: Boolean = true,
     onDismiss: () -> Unit,
     onSave: (name: String, colorHex: String, url: String) -> Unit,
     onDelete: () -> Unit = {}
@@ -37,19 +36,14 @@ fun AccountDialog(
     var url by remember { mutableStateOf(accountToEdit?.url ?: AccountRepository.DEFAULT_REMOTE_URL) }
     var selectedColor by remember { mutableStateOf(accountToEdit?.colorHex ?: "#3b82f6") }
 
-    val surfaceColor = if (isDarkTheme) SurfaceDark else SurfaceLight
-    val borderColor = if (isDarkTheme) BorderDark else BorderLight
-    val textPrimary = if (isDarkTheme) TextPrimaryDark else TextPrimaryLight
-    val textSecondary = if (isDarkTheme) TextSecondaryDark else TextSecondaryLight
-
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = surfaceColor,
-        shape = RoundedCornerShape(18.dp),
+        containerColor = MaterialTheme.colorScheme.surface,
+        shape = RoundedCornerShape(20.dp),
         title = {
             Text(
                 text = if (accountToEdit != null) "Edit Account" else "Add New Account",
-                color = textPrimary,
+                color = MaterialTheme.colorScheme.onSurface,
                 fontSize = 18.sp,
                 fontWeight = FontWeight.Bold
             )
@@ -69,12 +63,12 @@ fun AccountDialog(
                     shape = RoundedCornerShape(10.dp),
                     modifier = Modifier.fillMaxWidth(),
                     colors = OutlinedTextFieldDefaults.colors(
-                        focusedTextColor = textPrimary,
-                        unfocusedTextColor = textPrimary,
-                        focusedBorderColor = AccentBlue,
-                        unfocusedBorderColor = borderColor,
-                        focusedLabelColor = AccentBlue,
-                        unfocusedLabelColor = textSecondary
+                        focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                        unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+                        focusedBorderColor = MaterialTheme.colorScheme.primary,
+                        unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
+                        focusedLabelColor = MaterialTheme.colorScheme.primary,
+                        unfocusedLabelColor = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 )
 
@@ -86,18 +80,18 @@ fun AccountDialog(
                     shape = RoundedCornerShape(10.dp),
                     modifier = Modifier.fillMaxWidth(),
                     colors = OutlinedTextFieldDefaults.colors(
-                        focusedTextColor = textPrimary,
-                        unfocusedTextColor = textPrimary,
-                        focusedBorderColor = AccentBlue,
-                        unfocusedBorderColor = borderColor,
-                        focusedLabelColor = AccentBlue,
-                        unfocusedLabelColor = textSecondary
+                        focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                        unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+                        focusedBorderColor = MaterialTheme.colorScheme.primary,
+                        unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
+                        focusedLabelColor = MaterialTheme.colorScheme.primary,
+                        unfocusedLabelColor = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 )
 
                 Text(
                     text = "Profile Accent Color",
-                    color = textSecondary,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Medium
                 )
@@ -116,7 +110,7 @@ fun AccountDialog(
                                 .background(color)
                                 .border(
                                     width = if (isSelected) 3.dp else 1.dp,
-                                    color = if (isSelected) (if (isDarkTheme) Color.White else Color.Black) else Color.Transparent,
+                                    color = if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent,
                                     shape = CircleShape
                                 )
                                 .clickable { selectedColor = hex }
@@ -130,8 +124,8 @@ fun AccountDialog(
                 onClick = {
                     onSave(name, selectedColor, url)
                 },
-                shape = RoundedCornerShape(8.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = AccentBlue)
+                shape = RoundedCornerShape(10.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
             ) {
                 Text("Save", fontWeight = FontWeight.SemiBold)
             }
@@ -148,7 +142,7 @@ fun AccountDialog(
                 }
                 TextButton(
                     onClick = onDismiss,
-                    colors = ButtonDefaults.textButtonColors(contentColor = textSecondary)
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.onSurfaceVariant)
                 ) {
                     Text("Cancel")
                 }

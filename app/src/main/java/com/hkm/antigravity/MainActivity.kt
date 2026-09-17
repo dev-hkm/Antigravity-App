@@ -37,7 +37,10 @@ class MainActivity : ComponentActivity() {
         setContent {
             val settings by settingsRepository.settingsFlow.collectAsState()
 
-            AntigravityTheme(themeMode = settings.themeMode) {
+            AntigravityTheme(
+                themeMode = settings.themeMode,
+                dynamicColor = settings.dynamicColor
+            ) {
                 MainScreen(
                     accountRepository = accountRepository,
                     settingsRepository = settingsRepository,

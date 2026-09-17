@@ -1,14 +1,13 @@
 package com.hkm.antigravity.ui.theme
 
 import android.app.Activity
+import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.lightColorScheme
+import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 
@@ -17,6 +16,7 @@ private val DarkColorScheme = darkColorScheme(
     secondary = AccentPurple,
     background = BgDark,
     surface = SurfaceDark,
+    surfaceVariant = SurfaceElevatedDark,
     onPrimary = Color.White,
     onSecondary = Color.White,
     onBackground = TextPrimaryDark,
@@ -28,6 +28,7 @@ private val LightColorScheme = lightColorScheme(
     secondary = AccentPurple,
     background = BgLight,
     surface = SurfaceLight,
+    surfaceVariant = SurfaceElevatedLight,
     onPrimary = Color.White,
     onSecondary = Color.White,
     onBackground = TextPrimaryLight,
@@ -36,7 +37,8 @@ private val LightColorScheme = lightColorScheme(
 
 @Composable
 fun AntigravityTheme(
-    themeMode: String = "system", // "system", "dark", "light"
+    themeMode: String = "system",
+    dynamicColor: Boolean = true,
     content: @Composable () -> Unit
 ) {
     val isDark = when (themeMode) {
@@ -45,7 +47,14 @@ fun AntigravityTheme(
         else -> isSystemInDarkTheme()
     }
 
-    val colorScheme = if (isDark) DarkColorScheme else LightColorScheme
+    val context = LocalContext.current
+    val colorScheme = when {
+        dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
+            if (isDark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+        }
+        isDark -> DarkColorScheme
+        else -> LightColorScheme
+    }
 
     val view = LocalView.current
     if (!view.isInEditMode) {
@@ -54,9 +63,7 @@ fun AntigravityTheme(
             WindowCompat.setDecorFitsSystemWindows(window, false)
             window.statusBarColor = android.graphics.Color.TRANSPARENT
             window.navigationBarColor = android.graphics.Color.TRANSPARENT
-            
-            // If dark theme -> light icons (isAppearanceLight = false)
-            // If light theme -> dark icons (isAppearanceLight = true)
+
             val insetsController = WindowCompat.getInsetsController(window, view)
             insetsController.isAppearanceLightStatusBars = !isDark
             insetsController.isAppearanceLightNavigationBars = !isDark
