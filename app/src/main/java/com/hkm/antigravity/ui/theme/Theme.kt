@@ -4,27 +4,49 @@ import android.app.Activity
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 
 private val DarkColorScheme = darkColorScheme(
     primary = AccentBlue,
-    secondary = AccentBlue,
+    secondary = AccentPurple,
     background = BgDark,
     surface = SurfaceDark,
-    onPrimary = TextPrimary,
-    onSecondary = TextPrimary,
-    onBackground = TextPrimary,
-    onSurface = TextPrimary
+    onPrimary = Color.White,
+    onSecondary = Color.White,
+    onBackground = TextPrimaryDark,
+    onSurface = TextPrimaryDark
+)
+
+private val LightColorScheme = lightColorScheme(
+    primary = AccentBlue,
+    secondary = AccentPurple,
+    background = BgLight,
+    surface = SurfaceLight,
+    onPrimary = Color.White,
+    onSecondary = Color.White,
+    onBackground = TextPrimaryLight,
+    onSurface = TextPrimaryLight
 )
 
 @Composable
 fun AntigravityTheme(
+    themeMode: String = "system", // "system", "dark", "light"
     content: @Composable () -> Unit
 ) {
+    val isDark = when (themeMode) {
+        "dark" -> true
+        "light" -> false
+        else -> isSystemInDarkTheme()
+    }
+
+    val colorScheme = if (isDark) DarkColorScheme else LightColorScheme
+
     val view = LocalView.current
     if (!view.isInEditMode) {
         SideEffect {
@@ -32,13 +54,17 @@ fun AntigravityTheme(
             WindowCompat.setDecorFitsSystemWindows(window, false)
             window.statusBarColor = android.graphics.Color.TRANSPARENT
             window.navigationBarColor = android.graphics.Color.TRANSPARENT
-            WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = false
-            WindowCompat.getInsetsController(window, view).isAppearanceLightNavigationBars = false
+            
+            // If dark theme -> light icons (isAppearanceLight = false)
+            // If light theme -> dark icons (isAppearanceLight = true)
+            val insetsController = WindowCompat.getInsetsController(window, view)
+            insetsController.isAppearanceLightStatusBars = !isDark
+            insetsController.isAppearanceLightNavigationBars = !isDark
         }
     }
 
     MaterialTheme(
-        colorScheme = DarkColorScheme,
+        colorScheme = colorScheme,
         content = content
     )
 }

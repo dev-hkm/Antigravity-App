@@ -19,6 +19,7 @@ fun WebViewContainer(
     modifier: Modifier = Modifier,
     accountId: String,
     url: String,
+    autoConnect: Boolean = true,
     onWebViewCreated: (WebView) -> Unit,
     onProgressChange: (Int) -> Unit,
     onTitleChange: (String) -> Unit,
@@ -100,12 +101,51 @@ fun WebViewContainer(
                         }
                     }
 
-                    override fun onPageFinished(view: WebView?, url: String?) {
-                        if (!url.isNullOrEmpty()) {
-                            onUrlChange(url)
+                    override fun onPageFinished(view: WebView?, finishedUrl: String?) {
+                        if (!finishedUrl.isNullOrEmpty()) {
+                            onUrlChange(finishedUrl)
                         }
                         onProgressChange(100)
                         CookieManager.getInstance().flush()
+
+                        // Auto-connect injection when on instances list
+                        if (autoConnect && finishedUrl != null && finishedUrl.contains("antigravity.google.com")) {
+                            val jsAutoConnect = """
+                            (function() {
+                                if (window.__antiAutoConnected) return;
+                                function tryClickConnect() {
+                                    if (window.__antiAutoConnected) return false;
+                                    var candidates = document.querySelectorAll('button, a, [role="button"]');
+                                    for (var i = 0; i < candidates.length; i++) {
+                                        var el = candidates[i];
+                                        var text = (el.textContent || '').trim().toLowerCase();
+                                        var aria = (el.getAttribute('aria-label') || '').toLowerCase();
+                                        if (text === 'connect' || aria === 'connect' || text.indexOf('connect') !== -1 || aria.indexOf('connect') !== -1) {
+                                            if (el.offsetParent !== null && !el.disabled && !el.getAttribute('aria-disabled')) {
+                                                window.__antiAutoConnected = true;
+                                                el.click();
+                                                return true;
+                                            }
+                                        }
+                                    }
+                                    return false;
+                                }
+                                if (tryClickConnect()) return;
+                                var observer = new MutationObserver(function(mutations, obs) {
+                                    if (tryClickConnect()) {
+                                        obs.disconnect();
+                                    }
+                                });
+                                if (document.body) {
+                                    observer.observe(document.body, { childList: true, subtree: true });
+                                }
+                                setTimeout(function() {
+                                    observer.disconnect();
+                                }, 15000);
+                            })();
+                            """.trimIndent()
+                            evaluateJavascript(jsAutoConnect, null)
+                        }
                     }
 
                     override fun shouldOverrideUrlLoading(

@@ -1,8 +1,0 @@
-com.hkm.antigravity.app-pngs-0 C:\AppWedProjects\Antigravity App\app\build\generated\res\pngs\release
-com.hkm.antigravity.app-updated_navigation_xml-1 C:\AppWedProjects\Antigravity App\app\build\generated\updated_navigation_xml\release
-com.hkm.antigravity.app-packageReleaseResources-2 C:\AppWedProjects\Antigravity App\app\build\intermediates\incremental\release\packageReleaseResources\merged.dir
-com.hkm.antigravity.app-packageReleaseResources-3 C:\AppWedProjects\Antigravity App\app\build\intermediates\incremental\release\packageReleaseResources\stripped.dir
-com.hkm.antigravity.app-release-4 C:\AppWedProjects\Antigravity App\app\build\intermediates\merged_res\release\mergeReleaseResources
-com.hkm.antigravity.app-main-5 C:\AppWedProjects\Antigravity App\app\src\main\res
-com.hkm.antigravity.app-release-6 C:\AppWedProjects\Antigravity App\app\src\release\res
-gradleHome-0 C:\Users\ASUS\.gradle

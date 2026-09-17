@@ -1,6 +1,5 @@
 package com.hkm.antigravity.ui.screens
 
-import android.app.Activity
 import android.content.Intent
 import android.net.Uri
 import android.webkit.ValueCallback
@@ -9,19 +8,16 @@ import android.webkit.WebView
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
+import androidx.compose.animation.*
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -37,26 +33,44 @@ import androidx.compose.ui.unit.sp
 import com.hkm.antigravity.R
 import com.hkm.antigravity.data.model.Account
 import com.hkm.antigravity.data.repository.AccountRepository
+import com.hkm.antigravity.data.repository.SettingsRepository
 import com.hkm.antigravity.ui.components.AccountBottomSheet
 import com.hkm.antigravity.ui.components.AccountDialog
+import com.hkm.antigravity.ui.components.SettingsBottomSheet
 import com.hkm.antigravity.ui.components.WebViewContainer
 import com.hkm.antigravity.ui.theme.*
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainScreen(
-    repository: AccountRepository,
+    accountRepository: AccountRepository,
+    settingsRepository: SettingsRepository,
     onFinish: () -> Unit
 ) {
-    val accounts by repository.accountsFlow.collectAsState()
-    val activeAccount by repository.activeAccountFlow.collectAsState()
+    val accounts by accountRepository.accountsFlow.collectAsState()
+    val activeAccount by accountRepository.activeAccountFlow.collectAsState()
+    val settings by settingsRepository.settingsFlow.collectAsState()
+
+    val isDark = when (settings.themeMode) {
+        "dark" -> true
+        "light" -> false
+        else -> isSystemInDarkTheme()
+    }
+
+    val bgColor = if (isDark) BgDark else BgLight
+    val headerBg = if (isDark) BgHeaderDark else BgHeaderLight
+    val surfaceColor = if (isDark) SurfaceDark else SurfaceLight
+    val borderColor = if (isDark) BorderDark else BorderLight
+    val textPrimary = if (isDark) TextPrimaryDark else TextPrimaryLight
+    val textSecondary = if (isDark) TextSecondaryDark else TextSecondaryLight
 
     var webViewInstance by remember { mutableStateOf<WebView?>(null) }
     var currentUrl by remember { mutableStateOf(activeAccount?.url ?: AccountRepository.DEFAULT_REMOTE_URL) }
     var pageProgress by remember { mutableIntStateOf(0) }
-    var isZenMode by remember { mutableStateOf(false) }
+    var isZenMode by remember { mutableStateOf(settings.defaultZenMode) }
 
     var showAccountSheet by remember { mutableStateOf(false) }
+    var showSettingsSheet by remember { mutableStateOf(false) }
     var showAccountDialog by remember { mutableStateOf(false) }
     var accountToEdit by remember { mutableStateOf<Account?>(null) }
 
@@ -66,7 +80,7 @@ fun MainScreen(
     val filePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
     ) { result ->
-        val uris: Array<Uri>? = if (result.resultCode == Activity.RESULT_OK) {
+        val uris: Array<Uri>? = if (result.resultCode == android.app.Activity.RESULT_OK) {
             val data = result.data
             when {
                 data?.clipData != null -> {
@@ -82,7 +96,7 @@ fun MainScreen(
         filePathCallback = null
     }
 
-    // Intercept back button to navigate webview history
+    // Intercept back button
     BackHandler {
         if (webViewInstance?.canGoBack() == true) {
             webViewInstance?.goBack()
@@ -101,36 +115,39 @@ fun MainScreen(
 
     Scaffold(
         modifier = Modifier.fillMaxSize(),
-        containerColor = BgDark,
+        containerColor = bgColor,
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             if (!isZenMode) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(BgSidebar)
+                        .background(headerBg)
                         .statusBarsPadding()
                 ) {
-                    // Header Bar
+                    // Sleek Native Client Header (No ugly URL/Browser bar!)
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(52.dp)
-                            .padding(horizontal = 12.dp),
+                            .height(54.dp)
+                            .padding(horizontal = 14.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        // Official Brand Icon & Title
+                        // Official Brand Identity & Online Status
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.clickable {
-                                webViewInstance?.loadUrl(activeAccount?.url ?: AccountRepository.DEFAULT_REMOTE_URL)
-                            }
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable {
+                                    webViewInstance?.loadUrl(activeAccount?.url ?: AccountRepository.DEFAULT_REMOTE_URL)
+                                }
+                                .padding(vertical = 4.dp, horizontal = 2.dp)
                         ) {
                             Image(
                                 painter = painterResource(id = R.drawable.antigravity_logo),
                                 contentDescription = "Antigravity",
                                 modifier = Modifier
-                                    .size(30.dp)
+                                    .size(28.dp)
                                     .clip(CircleShape)
                             )
                             Spacer(modifier = Modifier.width(10.dp))
@@ -138,25 +155,33 @@ fun MainScreen(
                                 text = "Antigravity",
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 16.sp,
-                                color = TextPrimary
+                                letterSpacing = (-0.3).sp,
+                                color = textPrimary
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Box(
+                                modifier = Modifier
+                                    .size(6.dp)
+                                    .clip(CircleShape)
+                                    .background(SuccessGreen)
                             )
                         }
 
                         Spacer(modifier = Modifier.weight(1f))
 
-                        // Active Account Pill (Tap to switch accounts)
+                        // Glassmorphic Account Switcher Chip
                         Row(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(20.dp))
-                                .background(SurfaceDark)
-                                .border(1.dp, activeColor.copy(alpha = 0.5f), RoundedCornerShape(20.dp))
+                                .background(surfaceColor)
+                                .border(1.dp, borderColor, RoundedCornerShape(20.dp))
                                 .clickable { showAccountSheet = true }
                                 .padding(horizontal = 10.dp, vertical = 6.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Box(
                                 modifier = Modifier
-                                    .size(10.dp)
+                                    .size(9.dp)
                                     .clip(CircleShape)
                                     .background(activeColor)
                             )
@@ -165,7 +190,7 @@ fun MainScreen(
                                 text = activeAccount?.name ?: "Account",
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.SemiBold,
-                                color = TextPrimary,
+                                color = textPrimary,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
@@ -173,103 +198,54 @@ fun MainScreen(
                             Icon(
                                 imageVector = Icons.Default.KeyboardArrowDown,
                                 contentDescription = "Switch Account",
-                                tint = TextSecondary,
+                                tint = textSecondary,
                                 modifier = Modifier.size(16.dp)
                             )
                         }
 
                         Spacer(modifier = Modifier.width(6.dp))
 
-                        // Zen Mode Toggle (Expand to fullscreen)
-                        IconButton(
-                            onClick = { isZenMode = true },
-                            modifier = Modifier.size(36.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Fullscreen,
-                                contentDescription = "Fullscreen",
-                                tint = TextSecondary,
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
-                    }
-
-                    // Navigation Bar (Back, Forward, Refresh, URL display)
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 10.dp, vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        IconButton(
-                            onClick = { webViewInstance?.goBack() },
-                            enabled = webViewInstance?.canGoBack() == true,
-                            modifier = Modifier.size(32.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                                contentDescription = "Back",
-                                tint = if (webViewInstance?.canGoBack() == true) TextPrimary else TextSecondary.copy(alpha = 0.4f),
-                                modifier = Modifier.size(18.dp)
-                            )
-                        }
-
-                        IconButton(
-                            onClick = { webViewInstance?.goForward() },
-                            enabled = webViewInstance?.canGoForward() == true,
-                            modifier = Modifier.size(32.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-                                contentDescription = "Forward",
-                                tint = if (webViewInstance?.canGoForward() == true) TextPrimary else TextSecondary.copy(alpha = 0.4f),
-                                modifier = Modifier.size(18.dp)
-                            )
-                        }
-
+                        // Refresh Button
                         IconButton(
                             onClick = { webViewInstance?.reload() },
-                            modifier = Modifier.size(32.dp)
+                            modifier = Modifier.size(34.dp)
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Refresh,
                                 contentDescription = "Reload",
-                                tint = TextPrimary,
+                                tint = textSecondary,
                                 modifier = Modifier.size(18.dp)
                             )
                         }
 
-                        // Compact URL / Title Display
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(30.dp)
-                                .clip(RoundedCornerShape(6.dp))
-                                .background(SurfaceDark)
-                                .padding(horizontal = 8.dp),
-                            contentAlignment = Alignment.CenterStart
+                        // Fullscreen / Zen Mode Toggle
+                        IconButton(
+                            onClick = { isZenMode = true },
+                            modifier = Modifier.size(34.dp)
                         ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(
-                                    imageVector = Icons.Default.Lock,
-                                    contentDescription = "SSL",
-                                    tint = Color(0xFF10B981),
-                                    modifier = Modifier.size(12.dp)
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(
-                                    text = currentUrl,
-                                    fontSize = 11.sp,
-                                    color = TextSecondary,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                            }
+                            Icon(
+                                imageVector = Icons.Default.Fullscreen,
+                                contentDescription = "Fullscreen",
+                                tint = textSecondary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+
+                        // Settings Gear Button
+                        IconButton(
+                            onClick = { showSettingsSheet = true },
+                            modifier = Modifier.size(34.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Settings,
+                                contentDescription = "Settings",
+                                tint = textSecondary,
+                                modifier = Modifier.size(18.dp)
+                            )
                         }
                     }
 
-                    // Progress bar
+                    // Sleek hairline loading indicator
                     if (pageProgress in 1..99) {
                         LinearProgressIndicator(
                             progress = { pageProgress / 100f },
@@ -280,7 +256,12 @@ fun MainScreen(
                             trackColor = Color.Transparent
                         )
                     } else {
-                        Spacer(modifier = Modifier.height(2.dp))
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(1.dp)
+                                .background(borderColor.copy(alpha = 0.5f))
+                        )
                     }
                 }
             }
@@ -290,12 +271,12 @@ fun MainScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
-                .background(BgDark)
+                .background(bgColor)
         ) {
             val accountId = activeAccount?.id ?: "acc_primary"
             val targetUrl = activeAccount?.url ?: AccountRepository.DEFAULT_REMOTE_URL
 
-            // Keying by accountId guarantees a fresh, clean WebView with isolated profile
+            // Isolated profile per account via Compose keying
             key(accountId) {
                 WebViewContainer(
                     modifier = Modifier
@@ -305,6 +286,7 @@ fun MainScreen(
                         .then(if (isZenMode) Modifier.statusBarsPadding() else Modifier),
                     accountId = accountId,
                     url = targetUrl,
+                    autoConnect = settings.autoConnect,
                     onWebViewCreated = { webView ->
                         webViewInstance = webView
                     },
@@ -333,7 +315,7 @@ fun MainScreen(
                 )
             }
 
-            // Floating button to exit Zen Mode
+            // Floating control pill in Zen Mode
             AnimatedVisibility(
                 visible = isZenMode,
                 enter = fadeIn(),
@@ -341,21 +323,51 @@ fun MainScreen(
                 modifier = Modifier
                     .align(Alignment.TopEnd)
                     .statusBarsPadding()
-                    .padding(8.dp)
+                    .padding(10.dp)
             ) {
-                IconButton(
-                    onClick = { isZenMode = false },
+                Row(
                     modifier = Modifier
-                        .size(36.dp)
-                        .clip(CircleShape)
-                        .background(SurfaceDark.copy(alpha = 0.85f))
+                        .clip(RoundedCornerShape(20.dp))
+                        .background(surfaceColor.copy(alpha = 0.90f))
+                        .border(1.dp, borderColor, RoundedCornerShape(20.dp))
+                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.FullscreenExit,
-                        contentDescription = "Exit Fullscreen",
-                        tint = TextPrimary,
-                        modifier = Modifier.size(20.dp)
-                    )
+                    IconButton(
+                        onClick = { showAccountSheet = true },
+                        modifier = Modifier.size(28.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(10.dp)
+                                .clip(CircleShape)
+                                .background(activeColor)
+                        )
+                    }
+
+                    IconButton(
+                        onClick = { showSettingsSheet = true },
+                        modifier = Modifier.size(28.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Settings,
+                            contentDescription = "Settings",
+                            tint = textSecondary,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+
+                    IconButton(
+                        onClick = { isZenMode = false },
+                        modifier = Modifier.size(28.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.FullscreenExit,
+                            contentDescription = "Exit Fullscreen",
+                            tint = textPrimary,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
                 }
             }
         }
@@ -366,9 +378,10 @@ fun MainScreen(
         AccountBottomSheet(
             accounts = accounts,
             activeAccount = activeAccount,
+            isDarkTheme = isDark,
             onDismiss = { showAccountSheet = false },
             onSelectAccount = { target ->
-                val newAcc = repository.switchAccount(target.id)
+                val newAcc = accountRepository.switchAccount(target.id)
                 if (newAcc != null) {
                     webViewInstance?.loadUrl(newAcc.url)
                 }
@@ -384,23 +397,44 @@ fun MainScreen(
         )
     }
 
+    // Settings Bottom Sheet
+    if (showSettingsSheet) {
+        SettingsBottomSheet(
+            settings = settings,
+            onDismiss = { showSettingsSheet = false },
+            onUpdateAutoConnect = { enabled ->
+                settingsRepository.setAutoConnect(enabled)
+            },
+            onUpdateThemeMode = { mode ->
+                settingsRepository.setThemeMode(mode)
+            },
+            onUpdateDefaultZenMode = { enabled ->
+                settingsRepository.setDefaultZenMode(enabled)
+            },
+            onClearCache = {
+                webViewInstance?.clearCache(true)
+            }
+        )
+    }
+
     // Account Add / Edit Dialog
     if (showAccountDialog) {
         AccountDialog(
             accountToEdit = accountToEdit,
             canDelete = accounts.size > 1,
+            isDarkTheme = isDark,
             onDismiss = { showAccountDialog = false },
             onSave = { name, colorHex, url ->
                 if (accountToEdit != null) {
-                    repository.updateAccount(accountToEdit!!.id, name, colorHex, url)
+                    accountRepository.updateAccount(accountToEdit!!.id, name, colorHex, url)
                 } else {
-                    repository.createAccount(name, colorHex, url)
+                    accountRepository.createAccount(name, colorHex, url)
                 }
                 showAccountDialog = false
             },
             onDelete = {
                 if (accountToEdit != null) {
-                    repository.deleteAccount(accountToEdit!!.id)
+                    accountRepository.deleteAccount(accountToEdit!!.id)
                 }
                 showAccountDialog = false
             }

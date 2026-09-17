@@ -7,13 +7,17 @@ import android.webkit.CookieManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.core.view.WindowCompat
 import com.hkm.antigravity.data.repository.AccountRepository
+import com.hkm.antigravity.data.repository.SettingsRepository
 import com.hkm.antigravity.ui.screens.MainScreen
 import com.hkm.antigravity.ui.theme.AntigravityTheme
 
 class MainActivity : ComponentActivity() {
     private lateinit var accountRepository: AccountRepository
+    private lateinit var settingsRepository: SettingsRepository
 
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
@@ -28,11 +32,15 @@ class MainActivity : ComponentActivity() {
         }
 
         accountRepository = AccountRepository(applicationContext)
+        settingsRepository = SettingsRepository(applicationContext)
 
         setContent {
-            AntigravityTheme {
+            val settings by settingsRepository.settingsFlow.collectAsState()
+
+            AntigravityTheme(themeMode = settings.themeMode) {
                 MainScreen(
-                    repository = accountRepository,
+                    accountRepository = accountRepository,
+                    settingsRepository = settingsRepository,
                     onFinish = { finish() }
                 )
             }

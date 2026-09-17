@@ -12,9 +12,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.hkm.antigravity.data.model.Account
+import com.hkm.antigravity.data.repository.AccountRepository
 import com.hkm.antigravity.ui.theme.*
 
 private val colorOptions = listOf(
@@ -26,22 +28,30 @@ private val colorOptions = listOf(
 fun AccountDialog(
     accountToEdit: Account? = null,
     canDelete: Boolean = false,
+    isDarkTheme: Boolean = true,
     onDismiss: () -> Unit,
     onSave: (name: String, colorHex: String, url: String) -> Unit,
     onDelete: () -> Unit = {}
 ) {
     var name by remember { mutableStateOf(accountToEdit?.name ?: "") }
-    var url by remember { mutableStateOf(accountToEdit?.url ?: "https://antigravity.google.com") }
+    var url by remember { mutableStateOf(accountToEdit?.url ?: AccountRepository.DEFAULT_REMOTE_URL) }
     var selectedColor by remember { mutableStateOf(accountToEdit?.colorHex ?: "#3b82f6") }
+
+    val surfaceColor = if (isDarkTheme) SurfaceDark else SurfaceLight
+    val borderColor = if (isDarkTheme) BorderDark else BorderLight
+    val textPrimary = if (isDarkTheme) TextPrimaryDark else TextPrimaryLight
+    val textSecondary = if (isDarkTheme) TextSecondaryDark else TextSecondaryLight
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = SurfaceDark,
+        containerColor = surfaceColor,
+        shape = RoundedCornerShape(18.dp),
         title = {
             Text(
-                text = if (accountToEdit != null) "Chỉnh sửa tài khoản" else "Thêm tài khoản mới",
-                color = TextPrimary,
-                fontSize = 18.sp
+                text = if (accountToEdit != null) "Edit Account" else "Add New Account",
+                color = textPrimary,
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold
             )
         },
         text = {
@@ -54,35 +64,42 @@ fun AccountDialog(
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
-                    label = { Text("Tên tài khoản (VD: Work, Personal)") },
+                    label = { Text("Account Name (e.g. Work, Personal)") },
                     singleLine = true,
+                    shape = RoundedCornerShape(10.dp),
                     modifier = Modifier.fillMaxWidth(),
                     colors = OutlinedTextFieldDefaults.colors(
-                        focusedTextColor = TextPrimary,
-                        unfocusedTextColor = TextPrimary,
+                        focusedTextColor = textPrimary,
+                        unfocusedTextColor = textPrimary,
                         focusedBorderColor = AccentBlue,
-                        unfocusedBorderColor = BorderDark
+                        unfocusedBorderColor = borderColor,
+                        focusedLabelColor = AccentBlue,
+                        unfocusedLabelColor = textSecondary
                     )
                 )
 
                 OutlinedTextField(
                     value = url,
                     onValueChange = { url = it },
-                    label = { Text("URL Antigravity") },
+                    label = { Text("Antigravity URL") },
                     singleLine = true,
+                    shape = RoundedCornerShape(10.dp),
                     modifier = Modifier.fillMaxWidth(),
                     colors = OutlinedTextFieldDefaults.colors(
-                        focusedTextColor = TextPrimary,
-                        unfocusedTextColor = TextPrimary,
+                        focusedTextColor = textPrimary,
+                        unfocusedTextColor = textPrimary,
                         focusedBorderColor = AccentBlue,
-                        unfocusedBorderColor = BorderDark
+                        unfocusedBorderColor = borderColor,
+                        focusedLabelColor = AccentBlue,
+                        unfocusedLabelColor = textSecondary
                     )
                 )
 
                 Text(
-                    text = "Màu nhận diện",
-                    color = TextSecondary,
-                    fontSize = 13.sp
+                    text = "Profile Accent Color",
+                    color = textSecondary,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Medium
                 )
 
                 Row(
@@ -99,7 +116,7 @@ fun AccountDialog(
                                 .background(color)
                                 .border(
                                     width = if (isSelected) 3.dp else 1.dp,
-                                    color = if (isSelected) Color.White else Color.Transparent,
+                                    color = if (isSelected) (if (isDarkTheme) Color.White else Color.Black) else Color.Transparent,
                                     shape = CircleShape
                                 )
                                 .clickable { selectedColor = hex }
@@ -113,9 +130,10 @@ fun AccountDialog(
                 onClick = {
                     onSave(name, selectedColor, url)
                 },
+                shape = RoundedCornerShape(8.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = AccentBlue)
             ) {
-                Text("Lưu")
+                Text("Save", fontWeight = FontWeight.SemiBold)
             }
         },
         dismissButton = {
@@ -125,14 +143,14 @@ fun AccountDialog(
                         onClick = onDelete,
                         colors = ButtonDefaults.textButtonColors(contentColor = DangerRed)
                     ) {
-                        Text("Xóa")
+                        Text("Delete")
                     }
                 }
                 TextButton(
                     onClick = onDismiss,
-                    colors = ButtonDefaults.textButtonColors(contentColor = TextSecondary)
+                    colors = ButtonDefaults.textButtonColors(contentColor = textSecondary)
                 ) {
-                    Text("Hủy")
+                    Text("Cancel")
                 }
             }
         }
