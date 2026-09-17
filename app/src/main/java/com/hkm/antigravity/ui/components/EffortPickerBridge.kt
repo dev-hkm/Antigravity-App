@@ -44,8 +44,6 @@ internal object EffortPickerBridge {
                     if (menu.querySelector('[data-testid="model-selector-panel"]') ||
                         menu.matches('[data-testid="model-selector-panel"]')) {
                         menu.classList.add('anti-model-menu-large');
-                        var modelItems = menu.querySelectorAll('[role="menuitem"], [data-testid="model-selector-item"], [data-testid="model-selector-effort-group"]');
-                        for (var m = 0; m < modelItems.length; m++) modelItems[m].classList.add('anti-model-item-large');
                     }
                     if (!/add\s+context/i.test(menu.textContent || '')) continue;
                     menu.classList.add('anti-context-menu-large');
@@ -61,8 +59,7 @@ internal object EffortPickerBridge {
                     '.anti-context-menu-large { width: min(82vw, 440px) !important; max-width: min(82vw, 440px) !important; max-height: 70vh !important; overflow-y: auto !important; padding: 6px !important; }',
                     '.anti-context-menu-large .anti-context-menu-item-large { min-width: 0 !important; min-height: 48px !important; padding: 10px 12px !important; gap: 10px !important; font-size: 14px !important; line-height: 1.25 !important; border-radius: 10px !important; }',
                     '.anti-context-menu-large .anti-context-menu-item-large svg { width: 18px !important; height: 18px !important; flex: 0 0 18px !important; }',
-                    '.anti-model-menu-large { width: min(86vw, 500px) !important; max-width: min(86vw, 500px) !important; max-height: 72vh !important; overflow-y: auto !important; padding: 6px !important; }',
-                    '.anti-model-menu-large .anti-model-item-large { min-width: 0 !important; min-height: 48px !important; padding: 10px 12px !important; gap: 10px !important; border-radius: 10px !important; }'
+                    '.anti-model-menu-large { width: min(86vw, 500px) !important; max-width: min(86vw, 500px) !important; max-height: 72vh !important; overflow-y: auto !important; }'
                 ].join('');
                 (document.head || document.documentElement).appendChild(style);
                 sizeContextMenu();
