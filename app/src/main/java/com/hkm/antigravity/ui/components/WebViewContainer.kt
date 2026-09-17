@@ -119,7 +119,6 @@ fun WebViewContainer(
         """.trimIndent()
 
         view.evaluateJavascript(script, null)
-        view.evaluateJavascript(EffortPickerBridge.script, null)
     }
 
     fun applyThemeToWebView(view: WebView, dark: Boolean) {
@@ -208,6 +207,20 @@ fun WebViewContainer(
                     allowContentAccess = true
                     mediaPlaybackRequiresUserGesture = false
                     setGeolocationEnabled(true)
+                }
+
+                // The model picker lives in a cross-origin iframe. evaluateJavascript
+                // targets only the host page; register before navigation for every matching frame.
+                if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
+                    WebViewCompat.addDocumentStartJavaScript(
+                        this, EffortPickerBridge.script, EffortPickerBridge.allowedOrigins
+                    )
+                } else {
+                    android.widget.Toast.makeText(
+                        context,
+                        "Hãy cập nhật Android System WebView để chọn model và effort đúng cách.",
+                        android.widget.Toast.LENGTH_LONG
+                    ).show()
                 }
 
                 applyThemeToWebView(this, currentIsWebDark)

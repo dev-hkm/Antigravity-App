@@ -1,5 +1,20 @@
 # Handoff: Effort Picker Khong Hoat Dong Tren Mobile
 
+## 2026-09-17: v1.3.9 — findings superseding the historical hypotheses below
+
+- Confirmed architecture: the Angular host at `antigravity.google.com` loads remote control in a cross-origin iframe titled `Antigravity Remote Control`, from `https://antigravity.static.usercontent.goog/web/<version>/?iframe=true`. The host route module is `PGmR6b`.
+- Examined public upstream bundle `https://antigravity.static.usercontent.goog/web/1.0.20260910010023/main.js`. The actual picker uses React + Base UI, NOT Radix. In `pIb`, desktop grouped-model `CQ.onClick` selects the default effort; `vIb` then closes the picker. Hover/keyboard opens the submenu. The mobile branch is selected by the `mobileLayout` feature flag, not simply the user agent.
+- Primary integration bug: every previous `evaluateJavascript` listener ran in the TOP document. Touch events inside a cross-origin iframe never bubble to it. This explains the absence of any highlight/delay across prior patches.
+- Additional v1.3.8 flaw: moving that script to the correct iframe still swallowed interactions; installing it at document start also threw because `document.documentElement` did not exist yet.
+- v1.3.9 registers `WebViewCompat.addDocumentStartJavaScript` BEFORE navigation, restricted to the exact remote-control origin. Unsupported WebViews show an update notice. The new bridge does not require DOM readiness, private React internals, broad menu heuristics, or a timer swallowing all clicks.
+- Only touch/pen clicks on actual desktop effort-group submenu triggers are intercepted. Focus + ArrowRight (ArrowLeft in RTL) uses the menu's existing keyboard behavior to open the submenu without selecting the default. Effort rows, ordinary models, native mobile buttons, mouse, and keyboard are not intercepted.
+- Regression harness: `tools/test-effort-picker.cjs` loads the real public upstream Base UI and `CQ` components into a local intercepted cross-origin fixture; all other requests are blocked. No account, workspace, or API is accessed. It mirrors the upstream default-selection callback. This is a component-level browser reproduction, not a logged-in Android device test.
+- Commands: set `PLAYWRIGHT_MODULE` to an installed Playwright module if needed; run `node tools/test-effort-picker.cjs parent` (reproduces default selection with parent-only injection), then `node tools/test-effort-picker.cjs frame` (touch High, repeated Low/Medium/High, whitespace taps, ordinary model, mouse, keyboard, hover; no JS errors).
+- Removed old Kotlin string-presence tests: they asserted implementation strings, not whether users could select effort. `testReleaseUnitTest` is not configured in this project; use the browser regression harness and Release build/lint. No Debug APK required.
+- Device acceptance remains pending: no attached ADB device. Install v1.3.9, reopen a remote session, tap a grouped model, then Low/Medium/High. Do not present browser/build success as confirmed device success.
+
+## Historical notes (outdated implementation, retained for context)
+
 ## 1. Van de (user-facing)
 
 Tren Antigravity Android app, khi mo model picker (nhan nut chon model o thanh input), dropdown danh sach model hien ra. Khi cham vao mot model bat ky, model duoc chon ngay va dropdown dong lai luon - user KHONG BAO GIO thay duoc submenu effort (Low / Medium / High / Auto) nen khong the chon effort level.
