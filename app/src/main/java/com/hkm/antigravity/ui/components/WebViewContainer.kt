@@ -122,42 +122,95 @@ fun WebViewContainer(
                     return document.querySelectorAll('[data-radix-popper-content-wrapper]').length;
                 }
 
-                // Intercept at pointerdown (capture phase) - before Radix sees it.
-                // Radix uses onPointerDown to register clicks; blocking here prevents
-                // the model from being selected before the effort submenu can open.
-                document.addEventListener('pointerdown', function(e) {
-                    if (e.pointerType !== 'touch') return;
+                function closestMenuItem(n) {
+                    if (!n || !n.closest) return null;
+                    return n.closest('[role="menuitem"], [role="menuitemradio"], [role="option"], [data-radix-collection-item]');
+                }
 
-                    var item = e.target.closest('[role="menuitem"], [role="option"]');
-                    if (!item) return;
+                // ROOT CAUSE v1.3.1-1.3.6: fake hover (isTrusted=false) is ignored
+                // by React/Radix, and preventDefault on pointerdown never stops
+                // the compat click. FIX v1.3.7: TWO-TAP - swallow pointerdown +
+                // touchend + click of 1st tap, arm item, fallback click at 450ms.
+                window.__antiArmedItem = null;
+                window.__antiArmedTime = 0;
+                window.__antiFallbackTimer = null;
 
-                    var poppers = radixPopperCount();
-
-                    // If 2+ poppers: the effort submenu is already open.
-                    // User is tapping an effort item -> let it through normally.
-                    if (poppers >= 2) return;
-
-                    // If 0 poppers: no menu open at all -> let through.
-                    if (poppers === 0) return;
-
-                    // Exactly 1 popper: the model list is open and user just tapped a model.
-                    // Block Radix from seeing this as a click, then fire hover to open effort submenu.
-                    e.preventDefault();
-                    e.stopPropagation();
-
-                    // Synthesize full pointer+mouse hover chain
-                    ['pointerover', 'pointerenter', 'mouseenter', 'mouseover', 'mousemove'].forEach(function(t) {
-                        try { item.dispatchEvent(new PointerEvent(t, {bubbles:true, cancelable:true, isPrimary:true})); }
-                        catch(ex) { item.dispatchEvent(new MouseEvent(t, {bubbles:true, cancelable:true})); }
-                    });
-
-                    // Fallback: if no effort submenu appears after 400ms, click the model directly
-                    var target = item;
-                    setTimeout(function() {
-                        if (radixPopperCount() <= 1) {
-                            target.click();
+                function disarm() {
+                    try {
+                        if (window.__antiArmedItem && window.__antiArmedItem.style) {
+                            window.__antiArmedItem.style.removeProperty('outline');
+                            window.__antiArmedItem.style.removeProperty('outline-offset');
                         }
-                    }, 400);
+                    } catch (e) {}
+                    window.__antiArmedItem = null;
+                    window.__antiArmedTime = 0;
+                    if (window.__antiFallbackTimer) {
+                        clearTimeout(window.__antiFallbackTimer);
+                        window.__antiFallbackTimer = null;
+                    }
+                }
+
+                function armItem(item) {
+                    disarm();
+                    window.__antiArmedItem = item;
+                    window.__antiArmedTime = Date.now();
+                    try {
+                        item.style.setProperty('outline', '2px solid #3b82f6', 'important');
+                        item.style.setProperty('outline-offset', '-2px', 'important');
+                    } catch (e) {}
+                    ['pointerover', 'pointerenter', 'mouseenter', 'mouseover', 'mousemove', 'focus'].forEach(function (t) {
+                        try { item.dispatchEvent(new PointerEvent(t, {bubbles: true, cancelable: true})); }
+                        catch (ex) {
+                            try { item.dispatchEvent(new MouseEvent(t, {bubbles: true, cancelable: true})); }
+                            catch (ex2) {}
+                        }
+                    });
+                    try { item.focus({preventScroll: true}); } catch (e) {}
+                    var target = item;
+                    window.__antiFallbackTimer = setTimeout(function () {
+                        window.__antiFallbackTimer = null;
+                        if (window.__antiArmedItem === target && radixPopperCount() <= 1) {
+                            var el = target;
+                            disarm();
+                            try { el.click(); } catch (e) {}
+                        } else { disarm(); }
+                    }, 450);
+                }
+
+                function shouldBlockItem(item) {
+                    var poppers = radixPopperCount();
+                    if (poppers >= 2) { disarm(); return false; }
+                    if (poppers === 0) { disarm(); return false; }
+                    if (window.__antiArmedItem === item && (Date.now() - window.__antiArmedTime) < 3000) {
+                        disarm();
+                        return false;
+                    }
+                    return true;
+                }
+
+                ['pointerdown', 'touchend'].forEach(function (evtName) {
+                    document.addEventListener(evtName, function (e) {
+                        if (e.pointerType && e.pointerType !== 'touch' && e.pointerType !== 'pen') return;
+                        var item = closestMenuItem(e.target);
+                        if (!item) return;
+                        if (!shouldBlockItem(item)) return;
+                        try { e.preventDefault(); } catch (ex) {}
+                        try { e.stopPropagation(); } catch (ex) {}
+                        try { e.stopImmediatePropagation(); } catch (ex) {}
+                        armItem(item);
+                    }, {passive: false, capture: true});
+                });
+
+                document.addEventListener('click', function (e) {
+                    var item = closestMenuItem(e.target);
+                    if (!item) return;
+                    var c = radixPopperCount();
+                    if (c >= 2 || c === 0) return;
+                    if (window.__antiArmedItem === item && (Date.now() - window.__antiArmedTime) < 800) {
+                        try { e.preventDefault(); } catch (ex) {}
+                        try { e.stopPropagation(); } catch (ex) {}
+                        try { e.stopImmediatePropagation(); } catch (ex) {}
+                    }
                 }, {passive: false, capture: true});
             }
         })();
