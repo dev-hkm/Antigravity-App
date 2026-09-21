@@ -21,20 +21,79 @@ import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
 import com.hkm.antigravity.data.repository.AccountRepository
 
-private const val DESKTOP_UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36"
+private const val CHROME_DESKTOP_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36"
+private const val CHROME_MOBILE_UA = "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Mobile Safari/537.36"
+
+internal fun isGoogleAuthUrl(rawUrl: String?): Boolean {
+    val host = runCatching { Uri.parse(rawUrl).host?.lowercase() }.getOrNull() ?: return false
+    return host == "accounts.google.com" ||
+           host.endsWith(".accounts.google.com") ||
+           host == "oauth2.googleapis.com" ||
+           host.contains("accounts.google.")
+}
 
 internal fun isAntigravityHost(rawUrl: String?): Boolean {
     val host = runCatching { Uri.parse(rawUrl).host?.lowercase() }.getOrNull() ?: return false
     return host == "antigravity.google.com" || host.endsWith(".antigravity.google.com")
 }
 
-private fun getCleanMobileUserAgent(context: Context): String {
-    val defaultUa = WebSettings.getDefaultUserAgent(context)
-    return defaultUa
-        .replace(Regex(";\\s*wv"), "")
-        .replace(Regex("Version/\\d+\\.\\d+\\s*"), "")
-        .replace("; U;", ";")
-}
+private const val GOOGLE_AUTH_SHIM_SCRIPT = """
+(function() {
+    try {
+        var isWin = (navigator.userAgent || '').indexOf('Windows') !== -1;
+        var brands = [
+            { brand: 'Not(A:Brand', version: '99' },
+            { brand: 'Google Chrome', version: '133' },
+            { brand: 'Chromium', version: '133' }
+        ];
+        if (navigator.userAgentData || isWin) {
+            Object.defineProperty(navigator, 'userAgentData', {
+                get: function() {
+                    return {
+                        brands: brands,
+                        mobile: !isWin,
+                        platform: isWin ? 'Windows' : 'Android',
+                        getHighEntropyValues: function() {
+                            return Promise.resolve({
+                                brands: brands,
+                                mobile: !isWin,
+                                platform: isWin ? 'Windows' : 'Android',
+                                platformVersion: isWin ? '15.0.0' : '14.0.0',
+                                architecture: isWin ? 'x86' : 'arm',
+                                model: '',
+                                uaFullVersion: '133.0.0.0'
+                            });
+                        }
+                    };
+                },
+                configurable: true
+            });
+        }
+    } catch(e) {}
+    try {
+        Object.defineProperty(navigator, 'webdriver', {
+            get: function() { return undefined; },
+            configurable: true
+        });
+    } catch(e) {}
+    try {
+        Object.defineProperty(navigator, 'platform', {
+            get: function() {
+                return (navigator.userAgent || '').indexOf('Windows') !== -1 ? 'Win32' : 'Linux armv8l';
+            },
+            configurable: true
+        });
+    } catch(e) {}
+    try {
+        if (!window.chrome) {
+            window.chrome = {
+                app: { isInstalled: false },
+                runtime: {}
+            };
+        }
+    } catch(e) {}
+})();
+"""
 
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
@@ -168,15 +227,18 @@ fun WebViewContainer(
 
     fun applyDesktopMode(view: WebView, desktop: Boolean) {
         val s = view.settings
-        if (desktop) {
-            s.userAgentString = DESKTOP_UA
+        val currentUrl = view.url
+        if (isGoogleAuthUrl(currentUrl)) {
+            s.userAgentString = CHROME_DESKTOP_UA
+        } else if (desktop) {
+            s.userAgentString = CHROME_DESKTOP_UA
             s.useWideViewPort = true
             s.loadWithOverviewMode = true
             s.setSupportZoom(true)
             s.builtInZoomControls = true
             s.displayZoomControls = false
         } else {
-            s.userAgentString = getCleanMobileUserAgent(view.context)
+            s.userAgentString = CHROME_MOBILE_UA
             s.useWideViewPort = true
             s.loadWithOverviewMode = true
         }
@@ -231,6 +293,24 @@ fun WebViewContainer(
                     setGeolocationEnabled(true)
                     setSupportMultipleWindows(true)
                     javaScriptCanOpenWindowsAutomatically = true
+                }
+
+                if (WebViewFeature.isFeatureSupported(WebViewFeature.REQUESTED_WITH_HEADER_ALLOW_LIST)) {
+                    try {
+                        WebSettingsCompat.setRequestedWithHeaderOriginAllowList(settings, emptySet())
+                    } catch (e: Exception) {
+                        Log.e("WebViewContainer", "Error setting header allow list: ${e.message}")
+                    }
+                }
+
+                if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
+                    try {
+                        WebViewCompat.addDocumentStartJavaScript(
+                            this, GOOGLE_AUTH_SHIM_SCRIPT, setOf("*")
+                        )
+                    } catch (e: Exception) {
+                        Log.e("WebViewContainer", "Error adding auth shim: ${e.message}")
+                    }
                 }
 
                 // Register effort picker bridge for remote control cross-origin iframe
@@ -300,7 +380,19 @@ fun WebViewContainer(
                                 setSupportZoom(true)
                                 builtInZoomControls = true
                                 displayZoomControls = false
-                                userAgentString = view.settings.userAgentString
+                                userAgentString = CHROME_DESKTOP_UA
+                            }
+                            if (WebViewFeature.isFeatureSupported(WebViewFeature.REQUESTED_WITH_HEADER_ALLOW_LIST)) {
+                                try {
+                                    WebSettingsCompat.setRequestedWithHeaderOriginAllowList(settings, emptySet())
+                                } catch (_: Exception) {}
+                            }
+                            if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
+                                try {
+                                    WebViewCompat.addDocumentStartJavaScript(
+                                        this, GOOGLE_AUTH_SHIM_SCRIPT, setOf("*")
+                                    )
+                                } catch (_: Exception) {}
                             }
                             profileCookieManager.setAcceptCookie(true)
                             profileCookieManager.setAcceptThirdPartyCookies(this, true)
@@ -317,6 +409,7 @@ fun WebViewContainer(
                         popupWebView.webChromeClient = object : WebChromeClient() {
                             override fun onCloseWindow(window: WebView?) {
                                 flushCookiesForWebView(view)
+                                view.settings.userAgentString = if (isDesktopMode) CHROME_DESKTOP_UA else CHROME_MOBILE_UA
                                 view.reload()
                                 authDialog.dismiss()
                             }
@@ -336,6 +429,7 @@ fun WebViewContainer(
                                 }
                                 if (isAntigravityHost(popupUrl)) {
                                     flushCookiesForWebView(view)
+                                    view.settings.userAgentString = if (isDesktopMode) CHROME_DESKTOP_UA else CHROME_MOBILE_UA
                                     view.loadUrl(popupUrl)
                                     authDialog.dismiss()
                                     return true
@@ -347,6 +441,7 @@ fun WebViewContainer(
                                 super.onPageFinished(pView, finishedUrl)
                                 flushCookiesForWebView(view)
                                 if (finishedUrl != null && isAntigravityHost(finishedUrl)) {
+                                    view.settings.userAgentString = if (isDesktopMode) CHROME_DESKTOP_UA else CHROME_MOBILE_UA
                                     view.loadUrl(finishedUrl)
                                     authDialog.dismiss()
                                 }
@@ -364,8 +459,11 @@ fun WebViewContainer(
                 webViewClient = object : WebViewClient() {
                     override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
                         if (!url.isNullOrEmpty()) currentOnUrlChange(url)
-                        view?.let {
-                            if (isAntigravityHost(url)) injectWebTheme(it, currentIsWebDark)
+                        if (isGoogleAuthUrl(url)) {
+                            view?.settings?.userAgentString = CHROME_DESKTOP_UA
+                        } else if (isAntigravityHost(url)) {
+                            view?.settings?.userAgentString = if (isDesktopMode) CHROME_DESKTOP_UA else CHROME_MOBILE_UA
+                            view?.let { injectWebTheme(it, currentIsWebDark) }
                         }
                     }
 
@@ -452,6 +550,7 @@ fun WebViewContainer(
                         request: WebResourceRequest?
                     ): Boolean {
                         val targetUri = request?.url ?: return false
+                        val targetUrl = targetUri.toString()
                         val scheme = targetUri.scheme ?: ""
 
                         if (scheme != "http" && scheme != "https") {
@@ -464,9 +563,23 @@ fun WebViewContainer(
                             }
                         }
 
+                        if (isGoogleAuthUrl(targetUrl)) {
+                            view?.settings?.userAgentString = CHROME_DESKTOP_UA
+                        } else if (isAntigravityHost(targetUrl)) {
+                            view?.settings?.userAgentString = if (isDesktopMode) CHROME_DESKTOP_UA else CHROME_MOBILE_UA
+                        }
+
                         // Keep all HTTP/HTTPS navigation (including Google Accounts login) inside WebView
                         return false
                     }
+                }
+
+                if (isGoogleAuthUrl(url)) {
+                    settings.userAgentString = CHROME_DESKTOP_UA
+                } else if (isDesktopMode) {
+                    settings.userAgentString = CHROME_DESKTOP_UA
+                } else {
+                    settings.userAgentString = CHROME_MOBILE_UA
                 }
 
                 onWebViewCreated(this)
