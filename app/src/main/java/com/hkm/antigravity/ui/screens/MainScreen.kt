@@ -14,7 +14,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -29,10 +28,13 @@ import com.hkm.antigravity.ui.components.AccountBottomSheet
 import com.hkm.antigravity.ui.components.AccountDialog
 import com.hkm.antigravity.ui.components.DraggableActionPill
 import com.hkm.antigravity.ui.components.SettingsBottomSheet
-import com.hkm.antigravity.ui.components.SecureBrowserLauncher
-import com.hkm.antigravity.ui.components.SecureBrowserSurface
 import com.hkm.antigravity.ui.components.flushCookiesForWebView
 import com.hkm.antigravity.ui.components.WebViewContainer
+import android.app.Activity
+import androidx.activity.result.IntentSenderRequest
+import com.google.android.gms.auth.api.identity.AuthorizationRequest
+import com.google.android.gms.auth.api.identity.Identity
+import com.google.android.gms.common.api.Scope
 import com.hkm.antigravity.ui.theme.*
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -52,49 +54,13 @@ fun MainScreen(
     var currentUrl by remember { mutableStateOf(activeAccount?.url ?: AccountRepository.DEFAULT_REMOTE_URL) }
     var pageProgress by remember { mutableIntStateOf(0) }
     var googleAuthUrl by remember { mutableStateOf<String?>(null) }
-    var secureBrowserLaunchUrl by rememberSaveable { mutableStateOf<String?>(null) }
-    var secureBrowserLaunchNonce by rememberSaveable { mutableIntStateOf(0) }
-    var secureBrowserAutoLaunched by rememberSaveable { mutableStateOf(false) }
+    // Access tokens stay in process memory and are never written to storage.
+    var initialAccessToken by remember { mutableStateOf<String?>(null) }
 
     var showAccountSheet by remember { mutableStateOf(false) }
     var showSettingsSheet by remember { mutableStateOf(false) }
     var showAccountDialog by remember { mutableStateOf(false) }
     var accountToEdit by remember { mutableStateOf<Account?>(null) }
-
-    fun requestSecureBrowserOpen(url: String? = null) {
-        secureBrowserLaunchUrl = url
-        secureBrowserLaunchNonce++
-    }
-
-    LaunchedEffect(
-        settings.secureBrowserMode,
-        activeAccount?.id,
-        secureBrowserLaunchNonce,
-        secureBrowserLaunchUrl
-    ) {
-        if (!settings.secureBrowserMode) {
-            secureBrowserAutoLaunched = false
-            return@LaunchedEffect
-        }
-
-        if (secureBrowserLaunchUrl == null && secureBrowserAutoLaunched) return@LaunchedEffect
-
-        val url = secureBrowserLaunchUrl
-            ?: activeAccount?.url
-            ?: AccountRepository.DEFAULT_REMOTE_URL
-        secureBrowserLaunchUrl = null
-        secureBrowserAutoLaunched = true
-
-        if (!SecureBrowserLauncher.open(context, url)) {
-            secureBrowserAutoLaunched = false
-            settingsRepository.setSecureBrowserMode(false)
-            Toast.makeText(
-                context,
-                "Không tìm thấy trình duyệt an toàn trên thiết bị.",
-                Toast.LENGTH_LONG
-            ).show()
-        }
-    }
 
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner, webViewInstance) {
@@ -129,11 +95,64 @@ fun MainScreen(
         filePathCallback = null
     }
 
+    fun acceptNativeAuthorization(accessToken: String?) {
+        if (accessToken.isNullOrBlank()) {
+            Toast.makeText(context, "Google did not return an access token. Try again.", Toast.LENGTH_LONG).show()
+            return
+        }
+        googleAuthUrl = null
+        initialAccessToken = accessToken
+        webViewInstance = null
+        webViewGeneration++
+    }
+
+    val nativeAuthorizationLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartIntentSenderForResult()
+    ) { result ->
+        val token = result.data?.let { data ->
+            runCatching {
+                Identity.getAuthorizationClient(context).getAuthorizationResultFromIntent(data).accessToken
+            }.getOrNull()
+        }
+        acceptNativeAuthorization(token)
+    }
+
+    fun requestNativeAuthorization() {
+        val activity = context as? Activity
+        if (activity == null) {
+            Toast.makeText(context, "Unable to start Google sign-in.", Toast.LENGTH_LONG).show()
+            return
+        }
+        val request = AuthorizationRequest.builder()
+            .setRequestedScopes(
+                listOf(
+                    Scope("https://www.googleapis.com/auth/cloud-platform"),
+                    Scope("openid"),
+                    Scope("https://www.googleapis.com/auth/userinfo.email"),
+                    Scope("https://www.googleapis.com/auth/userinfo.profile")
+                )
+            )
+            .build()
+        Identity.getAuthorizationClient(activity).authorize(request)
+            .addOnSuccessListener { result ->
+                if (result.hasResolution()) {
+                    result.pendingIntent?.let { pendingIntent ->
+                        nativeAuthorizationLauncher.launch(
+                            IntentSenderRequest.Builder(pendingIntent.intentSender).build()
+                        )
+                    } ?: acceptNativeAuthorization(null)
+                } else {
+                    acceptNativeAuthorization(result.accessToken)
+                }
+            }
+            .addOnFailureListener {
+                Toast.makeText(context, "Google sign-in could not start. Try again.", Toast.LENGTH_LONG).show()
+            }
+    }
+
     // Intercept back button for history navigation
     BackHandler {
-        if (settings.secureBrowserMode) {
-            onFinish()
-        } else if (webViewInstance?.canGoBack() == true) {
+        if (webViewInstance?.canGoBack() == true) {
             webViewInstance?.goBack()
         } else {
             onFinish()
@@ -154,21 +173,6 @@ fun MainScreen(
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
     ) {
-        if (settings.secureBrowserMode) {
-            SecureBrowserSurface(
-                activeAccount = activeAccount,
-                onOpenBrowser = {
-                    requestSecureBrowserOpen(activeAccount?.url ?: AccountRepository.DEFAULT_REMOTE_URL)
-                },
-                onAccountClick = { showAccountSheet = true },
-                onSettingsClick = { showSettingsSheet = true },
-                onUseEmbeddedView = {
-                    webViewInstance = null
-                    webViewGeneration++
-                    settingsRepository.setSecureBrowserMode(false)
-                }
-            )
-        } else {
             val accountId = activeAccount?.id ?: "acc_primary"
             val targetUrl = activeAccount?.url ?: AccountRepository.DEFAULT_REMOTE_URL
 
@@ -186,6 +190,7 @@ fun MainScreen(
                     webTheme = settings.webTheme,
                     isDesktopMode = settings.isDesktopMode,
                     autoConnect = settings.autoConnect,
+                    initialAccessToken = initialAccessToken,
                     onWebViewCreated = { webView ->
                         webViewInstance = webView
                     },
@@ -258,31 +263,25 @@ fun MainScreen(
                 onReloadClick = { webViewInstance?.reload() },
                 onSettingsClick = { showSettingsSheet = true }
             )
-        }
     }
 
-    googleAuthUrl?.let { authUrl ->
+    googleAuthUrl?.let {
         AlertDialog(
             onDismissRequest = { googleAuthUrl = null },
-            title = { Text("Đăng nhập Google bằng trình duyệt an toàn") },
+            title = { Text("Đăng nhập Google") },
             text = {
                 Text(
-                    "Google không cho phép đăng nhập trong WebView nhúng. " +
-                        "Secure Browser Mode sẽ mở Antigravity trong Chrome Custom Tab để " +
-                        "hoàn tất đăng nhập và tiếp tục dùng phiên ổn định. " +
-                        "Ứng dụng không chép cookie giữa browser và WebView."
+                    "Antigravity yêu cầu xác thực Google ngoài WebView. " +
+                        "Ứng dụng sẽ dùng màn hình đăng nhập Google chính chủ, rồi quay lại ngay phiên hiện tại."
                 )
             },
             confirmButton = {
                 TextButton(
                     onClick = {
-                        googleAuthUrl = null
-                        webViewInstance = null
-                        settingsRepository.setSecureBrowserMode(true)
-                        requestSecureBrowserOpen(authUrl)
+                        requestNativeAuthorization()
                     }
                 ) {
-                    Text("Mở Secure Browser")
+                    Text("Tiếp tục với Google")
                 }
             },
             dismissButton = {
@@ -301,10 +300,9 @@ fun MainScreen(
             onDismiss = { showAccountSheet = false },
             onSelectAccount = { target ->
                 flushCookiesForWebView(webViewInstance)
+                // A short-lived grant belongs only to the account that requested it.
+                initialAccessToken = null
                 accountRepository.switchAccount(target.id)
-                if (settings.secureBrowserMode) {
-                    requestSecureBrowserOpen(target.url)
-                }
             },
             onAddAccountClick = {
                 accountToEdit = null
@@ -336,14 +334,6 @@ fun MainScreen(
             },
             onUpdateDesktopMode = { enabled ->
                 settingsRepository.setDesktopMode(enabled)
-            },
-            onUpdateSecureBrowserMode = { enabled ->
-                webViewInstance = null
-                if (!enabled) webViewGeneration++
-                settingsRepository.setSecureBrowserMode(enabled)
-                if (enabled) {
-                    requestSecureBrowserOpen(activeAccount?.url ?: AccountRepository.DEFAULT_REMOTE_URL)
-                }
             },
             onUpdatePillOrientation = { orientation ->
                 settingsRepository.setPillOrientation(orientation)

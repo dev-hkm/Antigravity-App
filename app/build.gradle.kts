@@ -15,8 +15,8 @@ android {
         applicationId = "com.hkm.antigravity"
         minSdk = 26
         targetSdk = 36
-        versionCode = 23
-        versionName = "1.9.0"
+        versionCode = 24
+        versionName = "1.10.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -54,6 +54,7 @@ dependencies {
     implementation("androidx.webkit:webkit:1.17.0")
     implementation("androidx.compose.material:material-icons-extended")
     implementation("com.google.code.gson:gson:2.11.0")
+    implementation("com.google.android.gms:play-services-auth:22.0.0")
 
     testImplementation(libs.junit)
     androidTestImplementation(platform(libs.androidx.compose.bom))

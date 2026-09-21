@@ -20,7 +20,7 @@ import com.hkm.antigravity.data.repository.AccountRepository
 
 private const val DESKTOP_UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36"
 
-private fun isAntigravityHost(rawUrl: String?): Boolean {
+internal fun isAntigravityHost(rawUrl: String?): Boolean {
     val host = runCatching { Uri.parse(rawUrl).host?.lowercase() }.getOrNull() ?: return false
     return host == "antigravity.google.com" || host.endsWith(".antigravity.google.com")
 }
@@ -35,6 +35,7 @@ fun WebViewContainer(
     webTheme: String = "dark",
     isDesktopMode: Boolean = false,
     autoConnect: Boolean = true,
+    initialAccessToken: String? = null,
     onWebViewCreated: (WebView) -> Unit,
     onProgressChange: (Int) -> Unit,
     onTitleChange: (String) -> Unit,
@@ -268,7 +269,7 @@ fun WebViewContainer(
 
                 webViewClient = object : WebViewClient() {
                     override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
-                        if (!url.isNullOrEmpty()) currentOnUrlChange(url)
+                        if (!url.isNullOrEmpty()) currentOnUrlChange(AntigravityAuthorization.callbackUrl(url))
                         if (AuthUrlPolicy.isGoogleAuthUrl(url)) {
                             view?.stopLoading()
                             onGoogleAuthRequired(url!!)
@@ -280,7 +281,7 @@ fun WebViewContainer(
                     }
 
                     override fun onPageFinished(view: WebView?, finishedUrl: String?) {
-                        if (!finishedUrl.isNullOrEmpty()) currentOnUrlChange(finishedUrl)
+                        if (!finishedUrl.isNullOrEmpty()) currentOnUrlChange(AntigravityAuthorization.callbackUrl(finishedUrl))
                         currentOnProgressChange(100)
                         flushCookiesForWebView(view)
                         if (AuthUrlPolicy.isGoogleAuthUrl(finishedUrl)) {
@@ -376,7 +377,7 @@ fun WebViewContainer(
                 }
 
                 onWebViewCreated(this)
-                loadUrl(url)
+                loadUrl(AntigravityAuthorization.initialUrl(url, initialAccessToken))
             }
         },
         update = { /* Recreated on key(accountId) */ }
