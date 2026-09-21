@@ -5,6 +5,7 @@ import android.net.Uri
 import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
 import android.webkit.WebView
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -13,6 +14,10 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
@@ -23,6 +28,8 @@ import com.hkm.antigravity.ui.components.AccountBottomSheet
 import com.hkm.antigravity.ui.components.AccountDialog
 import com.hkm.antigravity.ui.components.DraggableActionPill
 import com.hkm.antigravity.ui.components.SettingsBottomSheet
+import com.hkm.antigravity.ui.components.SecureBrowserLauncher
+import com.hkm.antigravity.ui.components.flushCookiesForWebView
 import com.hkm.antigravity.ui.components.WebViewContainer
 import com.hkm.antigravity.ui.theme.*
 
@@ -36,16 +43,29 @@ fun MainScreen(
     val accounts by accountRepository.accountsFlow.collectAsState()
     val activeAccount by accountRepository.activeAccountFlow.collectAsState()
     val settings by settingsRepository.settingsFlow.collectAsState()
+    val context = LocalContext.current
 
     var webViewInstance by remember { mutableStateOf<WebView?>(null) }
     var webViewGeneration by remember { mutableIntStateOf(0) }
     var currentUrl by remember { mutableStateOf(activeAccount?.url ?: AccountRepository.DEFAULT_REMOTE_URL) }
     var pageProgress by remember { mutableIntStateOf(0) }
+    var googleAuthUrl by remember { mutableStateOf<String?>(null) }
 
     var showAccountSheet by remember { mutableStateOf(false) }
     var showSettingsSheet by remember { mutableStateOf(false) }
     var showAccountDialog by remember { mutableStateOf(false) }
     var accountToEdit by remember { mutableStateOf<Account?>(null) }
+
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner, webViewInstance) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_PAUSE || event == Lifecycle.Event.ON_STOP) {
+                flushCookiesForWebView(webViewInstance)
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
 
     // File / Media Chooser Support
     var filePathCallback by remember { mutableStateOf<ValueCallback<Array<Uri>>?>(null) }
@@ -117,6 +137,9 @@ fun MainScreen(
                 onUrlChange = { url ->
                     currentUrl = url
                 },
+                onGoogleAuthRequired = { url ->
+                    googleAuthUrl = url
+                },
                 onRendererCrashed = {
                     webViewInstance = null
                     webViewGeneration++
@@ -180,6 +203,42 @@ fun MainScreen(
         )
     }
 
+    googleAuthUrl?.let { authUrl ->
+        AlertDialog(
+            onDismissRequest = { googleAuthUrl = null },
+            title = { Text("Đăng nhập Google bằng trình duyệt an toàn") },
+            text = {
+                Text(
+                    "Google không cho phép đăng nhập trong WebView nhúng. " +
+                        "Hãy mở Chrome hoặc Chrome Custom Tab để hoàn tất đăng nhập. " +
+                        "Phiên Chrome và WebView không thể sao chép cookie cho nhau; " +
+                        "nếu Antigravity chưa nhận phiên trong app, hãy tiếp tục dùng tab an toàn này."
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        googleAuthUrl = null
+                        if (!SecureBrowserLauncher.open(context, authUrl)) {
+                            Toast.makeText(
+                                context,
+                                "Không tìm thấy trình duyệt an toàn trên thiết bị.",
+                                Toast.LENGTH_LONG
+                            ).show()
+                        }
+                    }
+                ) {
+                    Text("Mở trình duyệt an toàn")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { googleAuthUrl = null }) {
+                    Text("Đóng")
+                }
+            }
+        )
+    }
+
     // Account Switcher Bottom Sheet
     if (showAccountSheet) {
         AccountBottomSheet(
@@ -187,6 +246,7 @@ fun MainScreen(
             activeAccount = activeAccount,
             onDismiss = { showAccountSheet = false },
             onSelectAccount = { target ->
+                flushCookiesForWebView(webViewInstance)
                 accountRepository.switchAccount(target.id)
             },
             onAddAccountClick = {
@@ -245,6 +305,7 @@ fun MainScreen(
             canDelete = accounts.size > 1,
             onDismiss = { showAccountDialog = false },
             onSave = { name, colorHex, url ->
+                flushCookiesForWebView(webViewInstance)
                 if (accountToEdit != null) {
                     accountRepository.updateAccount(accountToEdit!!.id, name, colorHex, url)
                 } else {
@@ -254,6 +315,7 @@ fun MainScreen(
             },
             onDelete = {
                 if (accountToEdit != null) {
+                    flushCookiesForWebView(webViewInstance)
                     accountRepository.deleteAccount(accountToEdit!!.id)
                 }
                 showAccountDialog = false

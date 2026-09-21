@@ -3,7 +3,6 @@ package com.hkm.antigravity.data.repository
 import android.content.Context
 import android.content.SharedPreferences
 import android.net.Uri
-import android.webkit.CookieManager
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import com.hkm.antigravity.data.model.Account
@@ -86,7 +85,6 @@ class AccountRepository(private val context: Context) {
         val target = _accountsFlow.value.find { it.id == accountId } ?: return null
         prefs.edit().putString(KEY_ACTIVE_ID, target.id).apply()
         _activeAccountFlow.value = target
-        CookieManager.getInstance().flush()
         return target
     }
 

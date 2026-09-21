@@ -59,3 +59,10 @@ npm start
 3. **Chế độ Zen (Tối đa không gian làm việc)**:
    - Bấm nút mũi tên thu gọn trên thanh điều hướng để ẩn navbar.
    - Khi cần mở lại, bấm nút nhỏ ở góc trên bên phải màn hình.
+
+## 🔐 Đăng nhập Google trên Android
+
+Google không hỗ trợ đăng nhập trong WebView nhúng. Khi Antigravity chuyển sang
+Google OAuth, Android app sẽ dừng navigation trong WebView và yêu cầu mở Chrome
+Custom Tab hoặc trình duyệt hệ thống. Cookie của trình duyệt ngoài và WebView là
+hai vùng lưu trữ độc lập, nên app không giả lập User-Agent hoặc sao chép cookie.

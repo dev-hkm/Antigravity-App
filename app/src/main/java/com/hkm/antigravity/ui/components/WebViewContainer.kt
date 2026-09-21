@@ -20,6 +20,11 @@ import com.hkm.antigravity.data.repository.AccountRepository
 
 private const val DESKTOP_UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36"
 
+private fun isAntigravityHost(rawUrl: String?): Boolean {
+    val host = runCatching { Uri.parse(rawUrl).host?.lowercase() }.getOrNull() ?: return false
+    return host == "antigravity.google.com" || host.endsWith(".antigravity.google.com")
+}
+
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
 fun WebViewContainer(
@@ -34,6 +39,7 @@ fun WebViewContainer(
     onProgressChange: (Int) -> Unit,
     onTitleChange: (String) -> Unit,
     onUrlChange: (String) -> Unit,
+    onGoogleAuthRequired: (String) -> Unit,
     onRendererCrashed: () -> Unit,
     onShowFileChooser: (ValueCallback<Array<Uri>>?, WebChromeClient.FileChooserParams?) -> Boolean
 ) {
@@ -147,11 +153,10 @@ fun WebViewContainer(
         webViewRef?.let { wv ->
             applyThemeToWebView(wv, isWebDark)
             injectWebTheme(wv, isWebDark)
-            wv.reload()
         }
     }
 
-    fun applyDesktopMode(view: WebView, desktop: Boolean) {
+    fun applyDesktopMode(view: WebView, desktop: Boolean, defaultUserAgent: String) {
         val s = view.settings
         if (desktop) {
             s.userAgentString = DESKTOP_UA
@@ -161,8 +166,9 @@ fun WebViewContainer(
             s.builtInZoomControls = true
             s.displayZoomControls = false
         } else {
-            val ua = s.userAgentString
-            s.userAgentString = ua.replace("; wv", "").replace("Version/4.0 ", "")
+            // Keep the genuine WebView identity. Removing `; wv` only makes the
+            // fingerprint inconsistent and cannot make Google OAuth supported.
+            s.userAgentString = defaultUserAgent
             s.useWideViewPort = true
             s.loadWithOverviewMode = true
         }
@@ -170,7 +176,7 @@ fun WebViewContainer(
 
     LaunchedEffect(isDesktopMode) {
         webViewRef?.let { wv ->
-            applyDesktopMode(wv, isDesktopMode)
+            applyDesktopMode(wv, isDesktopMode, WebSettings.getDefaultUserAgent(wv.context))
             wv.reload()
         }
     }
@@ -180,19 +186,25 @@ fun WebViewContainer(
         factory = { context ->
             WebView(context).apply {
                 webViewRef = this
+                val defaultUserAgent = WebSettings.getDefaultUserAgent(context)
+
                 layoutParams = ViewGroup.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,
                     ViewGroup.LayoutParams.MATCH_PARENT
                 )
 
-                if (WebViewFeature.isFeatureSupported(WebViewFeature.MULTI_PROFILE)) {
+                val profileCookieManager = if (WebViewFeature.isFeatureSupported(WebViewFeature.MULTI_PROFILE)) {
                     try {
                         val profileName = "account_$accountId"
-                        ProfileStore.getInstance().getOrCreateProfile(profileName)
+                        val profile = ProfileStore.getInstance().getOrCreateProfile(profileName)
                         WebViewCompat.setProfile(this, profileName)
+                        profile.getCookieManager()
                     } catch (e: Exception) {
                         Log.e("WebViewContainer", "Error setting profile: ${e.message}")
+                        CookieManager.getInstance()
                     }
+                } else {
+                    CookieManager.getInstance()
                 }
 
                 settings.apply {
@@ -231,11 +243,10 @@ fun WebViewContainer(
                 }
 
                 applyThemeToWebView(this, currentIsWebDark)
-                applyDesktopMode(this, isDesktopMode)
+                applyDesktopMode(this, isDesktopMode, defaultUserAgent)
 
-                val cookieManager = CookieManager.getInstance()
-                cookieManager.setAcceptCookie(true)
-                cookieManager.setAcceptThirdPartyCookies(this, true)
+                profileCookieManager.setAcceptCookie(true)
+                profileCookieManager.setAcceptThirdPartyCookies(this, true)
 
                 webChromeClient = object : WebChromeClient() {
                     override fun onProgressChanged(view: WebView?, newProgress: Int) {
@@ -258,14 +269,27 @@ fun WebViewContainer(
                 webViewClient = object : WebViewClient() {
                     override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
                         if (!url.isNullOrEmpty()) currentOnUrlChange(url)
-                        view?.let { injectWebTheme(it, currentIsWebDark) }
+                        if (AuthUrlPolicy.isGoogleAuthUrl(url)) {
+                            view?.stopLoading()
+                            onGoogleAuthRequired(url!!)
+                            return
+                        }
+                        view?.let {
+                            if (isAntigravityHost(url)) injectWebTheme(it, currentIsWebDark)
+                        }
                     }
 
                     override fun onPageFinished(view: WebView?, finishedUrl: String?) {
                         if (!finishedUrl.isNullOrEmpty()) currentOnUrlChange(finishedUrl)
                         currentOnProgressChange(100)
-                        CookieManager.getInstance().flush()
-                        view?.let { injectWebTheme(it, currentIsWebDark) }
+                        flushCookiesForWebView(view)
+                        if (AuthUrlPolicy.isGoogleAuthUrl(finishedUrl)) {
+                            onGoogleAuthRequired(finishedUrl!!)
+                            return
+                        }
+                        view?.let {
+                            if (isAntigravityHost(finishedUrl)) injectWebTheme(it, currentIsWebDark)
+                        }
 
                         if (currentAutoConnect && finishedUrl != null &&
                             view?.url == finishedUrl &&
@@ -329,6 +353,7 @@ fun WebViewContainer(
                         view: WebView?,
                         detail: RenderProcessGoneDetail?
                     ): Boolean {
+                        flushCookiesForWebView(view)
                         view?.stopLoading()
                         view?.destroy()
                         Toast.makeText(context, "WebView restarted after a renderer failure.", Toast.LENGTH_LONG).show()
@@ -339,7 +364,15 @@ fun WebViewContainer(
                     override fun shouldOverrideUrlLoading(
                         view: WebView?,
                         request: WebResourceRequest?
-                    ): Boolean = false
+                    ): Boolean {
+                        if (request?.isForMainFrame == true &&
+                            AuthUrlPolicy.isGoogleAuthUrl(request.url.toString())
+                        ) {
+                            onGoogleAuthRequired(request.url.toString())
+                            return true
+                        }
+                        return false
+                    }
                 }
 
                 onWebViewCreated(this)
@@ -348,4 +381,10 @@ fun WebViewContainer(
         },
         update = { /* Recreated on key(accountId) */ }
     )
+
+    DisposableEffect(webViewRef) {
+        onDispose {
+            flushCookiesForWebView(webViewRef)
+        }
+    }
 }

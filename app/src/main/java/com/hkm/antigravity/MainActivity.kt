@@ -3,7 +3,6 @@ package com.hkm.antigravity
 import android.graphics.Color
 import android.os.Build
 import android.os.Bundle
-import android.webkit.CookieManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -48,15 +47,5 @@ class MainActivity : ComponentActivity() {
                 )
             }
         }
-    }
-
-    override fun onPause() {
-        super.onPause()
-        CookieManager.getInstance().flush()
-    }
-
-    override fun onStop() {
-        super.onStop()
-        CookieManager.getInstance().flush()
     }
 }
