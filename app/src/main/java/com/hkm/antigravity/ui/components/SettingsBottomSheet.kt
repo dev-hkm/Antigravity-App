@@ -36,6 +36,7 @@ fun SettingsBottomSheet(
     onUpdateWebTheme: (String) -> Unit,
     onUpdateDynamicColor: (Boolean) -> Unit,
     onUpdateDesktopMode: (Boolean) -> Unit,
+    onUpdateSecureBrowserMode: (Boolean) -> Unit,
     onUpdatePillOrientation: (String) -> Unit,
     onUpdatePillScale: (String) -> Unit,
     onUpdatePillOpacity: (Float) -> Unit,
@@ -324,6 +325,22 @@ fun SettingsBottomSheet(
                 colors = CardDefaults.outlinedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
             ) {
                 Column(modifier = Modifier.padding(14.dp)) {
+                    SettingsRowSwitch(
+                        icon = Lucide.SecureBrowser,
+                        title = "Secure Browser Mode",
+                        subtitle = "Recommended for stable Google login in Chrome",
+                        checked = settings.secureBrowserMode,
+                        onCheckedChange = {
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            onUpdateSecureBrowserMode(it)
+                        }
+                    )
+
+                    HorizontalDivider(
+                        modifier = Modifier.padding(vertical = 12.dp),
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                    )
+
                     SettingsRowSwitch(
                         icon = Lucide.Bolt,
                         title = "Auto-Connect",

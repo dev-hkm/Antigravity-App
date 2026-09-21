@@ -15,8 +15,8 @@ android {
         applicationId = "com.hkm.antigravity"
         minSdk = 26
         targetSdk = 36
-        versionCode = 22
-        versionName = "1.8.0"
+        versionCode = 23
+        versionName = "1.9.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -51,7 +51,7 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.11.0")
     implementation("androidx.datastore:datastore-preferences:1.1.2")
     implementation("androidx.browser:browser:1.10.0")
-    implementation("androidx.webkit:webkit:1.12.1")
+    implementation("androidx.webkit:webkit:1.17.0")
     implementation("androidx.compose.material:material-icons-extended")
     implementation("com.google.code.gson:gson:2.11.0")
 

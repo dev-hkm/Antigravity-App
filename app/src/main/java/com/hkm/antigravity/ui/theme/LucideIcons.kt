@@ -16,6 +16,8 @@ object Lucide {
     val Moon = Icons.Rounded.DarkMode
     val Sparkles = Icons.Rounded.AutoAwesome
     val Bolt = Icons.Rounded.Bolt
+    val SecureBrowser = Icons.Rounded.Security
+    val OpenInBrowser = Icons.Rounded.OpenInBrowser
     val Trash = Icons.Rounded.DeleteSweep
     val ChevronDown = Icons.Rounded.KeyboardArrowDown
     val Add = Icons.Rounded.Add

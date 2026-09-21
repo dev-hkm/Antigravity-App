@@ -14,6 +14,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -29,6 +30,7 @@ import com.hkm.antigravity.ui.components.AccountDialog
 import com.hkm.antigravity.ui.components.DraggableActionPill
 import com.hkm.antigravity.ui.components.SettingsBottomSheet
 import com.hkm.antigravity.ui.components.SecureBrowserLauncher
+import com.hkm.antigravity.ui.components.SecureBrowserSurface
 import com.hkm.antigravity.ui.components.flushCookiesForWebView
 import com.hkm.antigravity.ui.components.WebViewContainer
 import com.hkm.antigravity.ui.theme.*
@@ -50,11 +52,49 @@ fun MainScreen(
     var currentUrl by remember { mutableStateOf(activeAccount?.url ?: AccountRepository.DEFAULT_REMOTE_URL) }
     var pageProgress by remember { mutableIntStateOf(0) }
     var googleAuthUrl by remember { mutableStateOf<String?>(null) }
+    var secureBrowserLaunchUrl by rememberSaveable { mutableStateOf<String?>(null) }
+    var secureBrowserLaunchNonce by rememberSaveable { mutableIntStateOf(0) }
+    var secureBrowserAutoLaunched by rememberSaveable { mutableStateOf(false) }
 
     var showAccountSheet by remember { mutableStateOf(false) }
     var showSettingsSheet by remember { mutableStateOf(false) }
     var showAccountDialog by remember { mutableStateOf(false) }
     var accountToEdit by remember { mutableStateOf<Account?>(null) }
+
+    fun requestSecureBrowserOpen(url: String? = null) {
+        secureBrowserLaunchUrl = url
+        secureBrowserLaunchNonce++
+    }
+
+    LaunchedEffect(
+        settings.secureBrowserMode,
+        activeAccount?.id,
+        secureBrowserLaunchNonce,
+        secureBrowserLaunchUrl
+    ) {
+        if (!settings.secureBrowserMode) {
+            secureBrowserAutoLaunched = false
+            return@LaunchedEffect
+        }
+
+        if (secureBrowserLaunchUrl == null && secureBrowserAutoLaunched) return@LaunchedEffect
+
+        val url = secureBrowserLaunchUrl
+            ?: activeAccount?.url
+            ?: AccountRepository.DEFAULT_REMOTE_URL
+        secureBrowserLaunchUrl = null
+        secureBrowserAutoLaunched = true
+
+        if (!SecureBrowserLauncher.open(context, url)) {
+            secureBrowserAutoLaunched = false
+            settingsRepository.setSecureBrowserMode(false)
+            Toast.makeText(
+                context,
+                "Không tìm thấy trình duyệt an toàn trên thiết bị.",
+                Toast.LENGTH_LONG
+            ).show()
+        }
+    }
 
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner, webViewInstance) {
@@ -91,7 +131,9 @@ fun MainScreen(
 
     // Intercept back button for history navigation
     BackHandler {
-        if (webViewInstance?.canGoBack() == true) {
+        if (settings.secureBrowserMode) {
+            onFinish()
+        } else if (webViewInstance?.canGoBack() == true) {
             webViewInstance?.goBack()
         } else {
             onFinish()
@@ -112,95 +154,111 @@ fun MainScreen(
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
     ) {
-        val accountId = activeAccount?.id ?: "acc_primary"
-        val targetUrl = activeAccount?.url ?: AccountRepository.DEFAULT_REMOTE_URL
-
-        // Web view taking 100% full screen with IME & navigation bar padding
-        key(accountId, webViewGeneration) {
-            WebViewContainer(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .imePadding()
-                    .navigationBarsPadding()
-                    .statusBarsPadding(),
-                accountId = accountId,
-                url = targetUrl,
-                appThemeMode = settings.themeMode,
-                webTheme = settings.webTheme,
-                isDesktopMode = settings.isDesktopMode,
-                autoConnect = settings.autoConnect,
-                onWebViewCreated = { webView ->
-                    webViewInstance = webView
+        if (settings.secureBrowserMode) {
+            SecureBrowserSurface(
+                activeAccount = activeAccount,
+                onOpenBrowser = {
+                    requestSecureBrowserOpen(activeAccount?.url ?: AccountRepository.DEFAULT_REMOTE_URL)
                 },
-                onProgressChange = { pageProgress = it },
-                onTitleChange = { /* Title update */ },
-                onUrlChange = { url ->
-                    currentUrl = url
-                },
-                onGoogleAuthRequired = { url ->
-                    googleAuthUrl = url
-                },
-                onRendererCrashed = {
+                onAccountClick = { showAccountSheet = true },
+                onSettingsClick = { showSettingsSheet = true },
+                onUseEmbeddedView = {
                     webViewInstance = null
                     webViewGeneration++
-                },
-                onShowFileChooser = { callback, params ->
-                    filePathCallback?.onReceiveValue(null)
-                    filePathCallback = callback
-
-                    val intent = params?.createIntent() ?: Intent(Intent.ACTION_GET_CONTENT).apply {
-                        type = "*/*"
-                        putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
-                    }
-                    try {
-                        filePickerLauncher.launch(intent)
-                        true
-                    } catch (e: Exception) {
-                        filePathCallback?.onReceiveValue(null)
-                        filePathCallback = null
-                        false
-                    }
+                    settingsRepository.setSecureBrowserMode(false)
                 }
             )
-        }
+        } else {
+            val accountId = activeAccount?.id ?: "acc_primary"
+            val targetUrl = activeAccount?.url ?: AccountRepository.DEFAULT_REMOTE_URL
 
-        // Hairline loading indicator at the very top
-        if (pageProgress in 1..99) {
-            LinearProgressIndicator(
-                progress = { pageProgress / 100f },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .statusBarsPadding()
-                    .height(2.dp),
-                color = MaterialTheme.colorScheme.primary,
-                trackColor = Color.Transparent
+            // Web view taking 100% full screen with IME & navigation bar padding
+            key(accountId, webViewGeneration) {
+                WebViewContainer(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .imePadding()
+                        .navigationBarsPadding()
+                        .statusBarsPadding(),
+                    accountId = accountId,
+                    url = targetUrl,
+                    appThemeMode = settings.themeMode,
+                    webTheme = settings.webTheme,
+                    isDesktopMode = settings.isDesktopMode,
+                    autoConnect = settings.autoConnect,
+                    onWebViewCreated = { webView ->
+                        webViewInstance = webView
+                    },
+                    onProgressChange = { pageProgress = it },
+                    onTitleChange = { /* Title update */ },
+                    onUrlChange = { url ->
+                        currentUrl = url
+                    },
+                    onGoogleAuthRequired = { url ->
+                        googleAuthUrl = url
+                    },
+                    onRendererCrashed = {
+                        webViewInstance = null
+                        webViewGeneration++
+                    },
+                    onShowFileChooser = { callback, params ->
+                        filePathCallback?.onReceiveValue(null)
+                        filePathCallback = callback
+
+                        val intent = params?.createIntent() ?: Intent(Intent.ACTION_GET_CONTENT).apply {
+                            type = "*/*"
+                            putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
+                        }
+                        try {
+                            filePickerLauncher.launch(intent)
+                            true
+                        } catch (e: Exception) {
+                            filePathCallback?.onReceiveValue(null)
+                            filePathCallback = null
+                            false
+                        }
+                    }
+                )
+            }
+
+            // Hairline loading indicator at the very top
+            if (pageProgress in 1..99) {
+                LinearProgressIndicator(
+                    progress = { pageProgress / 100f },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .statusBarsPadding()
+                        .height(2.dp),
+                    color = MaterialTheme.colorScheme.primary,
+                    trackColor = Color.Transparent
+                )
+            }
+
+            // Draggable & Dockable Action Pill with deep customization
+            DraggableActionPill(
+                accountColor = activeColor,
+                isDesktopMode = settings.isDesktopMode,
+                webTheme = settings.webTheme,
+                orientation = settings.pillOrientation,
+                scale = settings.pillScale,
+                opacity = settings.pillOpacity,
+                showAccount = settings.showAccountOnPill,
+                showDesktop = settings.showDesktopOnPill,
+                showWebTheme = settings.showWebThemeOnPill,
+                showReload = settings.showReloadOnPill,
+                showSettings = settings.showSettingsOnPill,
+                onAccountClick = { showAccountSheet = true },
+                onToggleDesktopMode = {
+                    settingsRepository.setDesktopMode(!settings.isDesktopMode)
+                },
+                onToggleWebTheme = {
+                    val next = if (settings.webTheme == "dark") "light" else "dark"
+                    settingsRepository.setWebTheme(next)
+                },
+                onReloadClick = { webViewInstance?.reload() },
+                onSettingsClick = { showSettingsSheet = true }
             )
         }
-
-        // Draggable & Dockable Action Pill with deep customization
-        DraggableActionPill(
-            accountColor = activeColor,
-            isDesktopMode = settings.isDesktopMode,
-            webTheme = settings.webTheme,
-            orientation = settings.pillOrientation,
-            scale = settings.pillScale,
-            opacity = settings.pillOpacity,
-            showAccount = settings.showAccountOnPill,
-            showDesktop = settings.showDesktopOnPill,
-            showWebTheme = settings.showWebThemeOnPill,
-            showReload = settings.showReloadOnPill,
-            showSettings = settings.showSettingsOnPill,
-            onAccountClick = { showAccountSheet = true },
-            onToggleDesktopMode = {
-                settingsRepository.setDesktopMode(!settings.isDesktopMode)
-            },
-            onToggleWebTheme = {
-                val next = if (settings.webTheme == "dark") "light" else "dark"
-                settingsRepository.setWebTheme(next)
-            },
-            onReloadClick = { webViewInstance?.reload() },
-            onSettingsClick = { showSettingsSheet = true }
-        )
     }
 
     googleAuthUrl?.let { authUrl ->
@@ -210,25 +268,21 @@ fun MainScreen(
             text = {
                 Text(
                     "Google không cho phép đăng nhập trong WebView nhúng. " +
-                        "Hãy mở Chrome hoặc Chrome Custom Tab để hoàn tất đăng nhập. " +
-                        "Phiên Chrome và WebView không thể sao chép cookie cho nhau; " +
-                        "nếu Antigravity chưa nhận phiên trong app, hãy tiếp tục dùng tab an toàn này."
+                        "Secure Browser Mode sẽ mở Antigravity trong Chrome Custom Tab để " +
+                        "hoàn tất đăng nhập và tiếp tục dùng phiên ổn định. " +
+                        "Ứng dụng không chép cookie giữa browser và WebView."
                 )
             },
             confirmButton = {
                 TextButton(
                     onClick = {
                         googleAuthUrl = null
-                        if (!SecureBrowserLauncher.open(context, authUrl)) {
-                            Toast.makeText(
-                                context,
-                                "Không tìm thấy trình duyệt an toàn trên thiết bị.",
-                                Toast.LENGTH_LONG
-                            ).show()
-                        }
+                        webViewInstance = null
+                        settingsRepository.setSecureBrowserMode(true)
+                        requestSecureBrowserOpen(authUrl)
                     }
                 ) {
-                    Text("Mở trình duyệt an toàn")
+                    Text("Mở Secure Browser")
                 }
             },
             dismissButton = {
@@ -248,6 +302,9 @@ fun MainScreen(
             onSelectAccount = { target ->
                 flushCookiesForWebView(webViewInstance)
                 accountRepository.switchAccount(target.id)
+                if (settings.secureBrowserMode) {
+                    requestSecureBrowserOpen(target.url)
+                }
             },
             onAddAccountClick = {
                 accountToEdit = null
@@ -279,6 +336,14 @@ fun MainScreen(
             },
             onUpdateDesktopMode = { enabled ->
                 settingsRepository.setDesktopMode(enabled)
+            },
+            onUpdateSecureBrowserMode = { enabled ->
+                webViewInstance = null
+                if (!enabled) webViewGeneration++
+                settingsRepository.setSecureBrowserMode(enabled)
+                if (enabled) {
+                    requestSecureBrowserOpen(activeAccount?.url ?: AccountRepository.DEFAULT_REMOTE_URL)
+                }
             },
             onUpdatePillOrientation = { orientation ->
                 settingsRepository.setPillOrientation(orientation)

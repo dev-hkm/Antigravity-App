@@ -6,6 +6,8 @@ data class AppSettings(
     val webTheme: String = "dark", // "dark", "light", "follow_app"
     val dynamicColor: Boolean = true,
     val isDesktopMode: Boolean = false,
+    // Google authentication is supported by a real browser session, not the embedded WebView.
+    val secureBrowserMode: Boolean = false,
     val defaultZenMode: Boolean = true,
     // Toolbar Customization
     val pillOrientation: String = "horizontal", // "horizontal", "vertical"

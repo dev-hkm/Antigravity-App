@@ -1,6 +1,5 @@
 package com.hkm.antigravity.ui.components
 
-import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -13,10 +12,12 @@ internal object SecureBrowserLauncher {
 
         return try {
             CustomTabsIntent.Builder()
+                .setShowTitle(true)
+                .setShareState(CustomTabsIntent.SHARE_STATE_OFF)
                 .build()
                 .launchUrl(context, uri)
             true
-        } catch (_: ActivityNotFoundException) {
+        } catch (_: Exception) {
             try {
                 context.startActivity(
                     Intent(Intent.ACTION_VIEW, uri).apply {
@@ -24,7 +25,7 @@ internal object SecureBrowserLauncher {
                     }
                 )
                 true
-            } catch (_: ActivityNotFoundException) {
+            } catch (_: Exception) {
                 false
             }
         }

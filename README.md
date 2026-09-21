@@ -1,6 +1,6 @@
-# 🚀 Antigravity Multi-Account Desktop Client
+# 🚀 Antigravity Multi-Account Android Client
 
-Ứng dụng Desktop chuyên biệt cho Google Antigravity Web, tối ưu hoá hiệu năng vượt trội so với PWA, hỗ trợ quản lý đa tài khoản độc lập hoàn toàn.
+Ứng dụng Android chuyên biệt cho Google Antigravity Web, hỗ trợ quản lý đa tài khoản và một lớp WebView tối ưu cho thao tác nhanh.
 
 ---
 
@@ -63,6 +63,16 @@ npm start
 ## 🔐 Đăng nhập Google trên Android
 
 Google không hỗ trợ đăng nhập trong WebView nhúng. Khi Antigravity chuyển sang
-Google OAuth, Android app sẽ dừng navigation trong WebView và yêu cầu mở Chrome
-Custom Tab hoặc trình duyệt hệ thống. Cookie của trình duyệt ngoài và WebView là
-hai vùng lưu trữ độc lập, nên app không giả lập User-Agent hoặc sao chép cookie.
+Google OAuth, app tự chuyển sang **Secure Browser Mode** và mở Antigravity bằng
+Chrome Custom Tab (hoặc trình duyệt hệ thống nếu Custom Tab không khả dụng). Chế độ
+này được ghi nhớ để những lần sau mở thẳng đúng surface ổn định, không phụ thuộc vào
+việc browser có thể chép cookie ngược về WebView hay không.
+
+WebView vẫn có thể bật lại trong Settings nếu cần floating toolbar và các tiện ích
+native; tuy nhiên Google sign-in có thể tiếp tục bị chặn theo chính sách của Google.
+
+### Changelog 1.9.0
+
+- Thêm Secure Browser Mode, tự chuyển khi Google OAuth bị chặn.
+- Ghi nhớ chế độ browser và mở lại Antigravity bằng một chạm.
+- Cập nhật AndroidX WebKit lên 1.17.0 cho lớp tương thích WebView.

@@ -59,6 +59,10 @@ class SettingsRepository(context: Context) {
         saveSettings(_settingsFlow.value.copy(isDesktopMode = enabled))
     }
 
+    fun setSecureBrowserMode(enabled: Boolean) {
+        saveSettings(_settingsFlow.value.copy(secureBrowserMode = enabled))
+    }
+
     fun setDefaultZenMode(enabled: Boolean) {
         saveSettings(_settingsFlow.value.copy(defaultZenMode = enabled))
     }
