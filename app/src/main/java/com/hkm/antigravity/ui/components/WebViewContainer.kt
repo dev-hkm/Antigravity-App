@@ -1,9 +1,12 @@
 package com.hkm.antigravity.ui.components
 
 import android.annotation.SuppressLint
+import android.content.Context
+import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.Color as AndroidColor
 import android.net.Uri
+import android.os.Message
 import android.util.Log
 import android.widget.Toast
 import android.view.ViewGroup
@@ -25,6 +28,14 @@ internal fun isAntigravityHost(rawUrl: String?): Boolean {
     return host == "antigravity.google.com" || host.endsWith(".antigravity.google.com")
 }
 
+private fun getCleanMobileUserAgent(context: Context): String {
+    val defaultUa = WebSettings.getDefaultUserAgent(context)
+    return defaultUa
+        .replace(Regex(";\\s*wv"), "")
+        .replace(Regex("Version/\\d+\\.\\d+\\s*"), "")
+        .replace("; U;", ";")
+}
+
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
 fun WebViewContainer(
@@ -35,12 +46,10 @@ fun WebViewContainer(
     webTheme: String = "dark",
     isDesktopMode: Boolean = false,
     autoConnect: Boolean = true,
-    initialAccessToken: String? = null,
     onWebViewCreated: (WebView) -> Unit,
     onProgressChange: (Int) -> Unit,
     onTitleChange: (String) -> Unit,
     onUrlChange: (String) -> Unit,
-    onGoogleAuthRequired: (String) -> Unit,
     onRendererCrashed: () -> Unit,
     onShowFileChooser: (ValueCallback<Array<Uri>>?, WebChromeClient.FileChooserParams?) -> Boolean
 ) {
@@ -157,7 +166,7 @@ fun WebViewContainer(
         }
     }
 
-    fun applyDesktopMode(view: WebView, desktop: Boolean, defaultUserAgent: String) {
+    fun applyDesktopMode(view: WebView, desktop: Boolean) {
         val s = view.settings
         if (desktop) {
             s.userAgentString = DESKTOP_UA
@@ -167,9 +176,7 @@ fun WebViewContainer(
             s.builtInZoomControls = true
             s.displayZoomControls = false
         } else {
-            // Keep the genuine WebView identity. Removing `; wv` only makes the
-            // fingerprint inconsistent and cannot make Google OAuth supported.
-            s.userAgentString = defaultUserAgent
+            s.userAgentString = getCleanMobileUserAgent(view.context)
             s.useWideViewPort = true
             s.loadWithOverviewMode = true
         }
@@ -177,7 +184,7 @@ fun WebViewContainer(
 
     LaunchedEffect(isDesktopMode) {
         webViewRef?.let { wv ->
-            applyDesktopMode(wv, isDesktopMode, WebSettings.getDefaultUserAgent(wv.context))
+            applyDesktopMode(wv, isDesktopMode)
             wv.reload()
         }
     }
@@ -187,7 +194,6 @@ fun WebViewContainer(
         factory = { context ->
             WebView(context).apply {
                 webViewRef = this
-                val defaultUserAgent = WebSettings.getDefaultUserAgent(context)
 
                 layoutParams = ViewGroup.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,
@@ -223,10 +229,11 @@ fun WebViewContainer(
                     allowContentAccess = true
                     mediaPlaybackRequiresUserGesture = false
                     setGeolocationEnabled(true)
+                    setSupportMultipleWindows(true)
+                    javaScriptCanOpenWindowsAutomatically = true
                 }
 
-                // The model picker lives in a cross-origin iframe. evaluateJavascript
-                // targets only the host page; register before navigation for every matching frame.
+                // Register effort picker bridge for remote control cross-origin iframe
                 if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
                     try {
                         WebViewCompat.addDocumentStartJavaScript(
@@ -235,19 +242,15 @@ fun WebViewContainer(
                     } catch (_: Exception) {
                         Toast.makeText(context, "Model effort support is unavailable in this WebView.", Toast.LENGTH_LONG).show()
                     }
-                } else {
-                    android.widget.Toast.makeText(
-                        context,
-                        "Hãy cập nhật Android System WebView để chọn model và effort đúng cách.",
-                        android.widget.Toast.LENGTH_LONG
-                    ).show()
                 }
 
                 applyThemeToWebView(this, currentIsWebDark)
-                applyDesktopMode(this, isDesktopMode, defaultUserAgent)
+                applyDesktopMode(this, isDesktopMode)
 
                 profileCookieManager.setAcceptCookie(true)
                 profileCookieManager.setAcceptThirdPartyCookies(this, true)
+                CookieManager.getInstance().setAcceptCookie(true)
+                CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
 
                 webChromeClient = object : WebChromeClient() {
                     override fun onProgressChanged(view: WebView?, newProgress: Int) {
@@ -265,29 +268,111 @@ fun WebViewContainer(
                     ): Boolean {
                         return currentOnShowFileChooser(filePathCallback, fileChooserParams)
                     }
+
+                    override fun onCreateWindow(
+                        view: WebView?,
+                        isDialog: Boolean,
+                        isUserGesture: Boolean,
+                        resultMsg: Message?
+                    ): Boolean {
+                        if (view == null || resultMsg == null) return false
+                        val popupContext = view.context
+
+                        val popupWebView = WebView(popupContext).apply {
+                            layoutParams = ViewGroup.LayoutParams(
+                                ViewGroup.LayoutParams.MATCH_PARENT,
+                                ViewGroup.LayoutParams.MATCH_PARENT
+                            )
+                            if (WebViewFeature.isFeatureSupported(WebViewFeature.MULTI_PROFILE)) {
+                                try {
+                                    val profileName = "account_$accountId"
+                                    ProfileStore.getInstance().getOrCreateProfile(profileName)
+                                    WebViewCompat.setProfile(this, profileName)
+                                } catch (e: Exception) {
+                                    Log.e("WebViewContainer", "Error setting profile on popup: ${e.message}")
+                                }
+                            }
+                            settings.apply {
+                                javaScriptEnabled = true
+                                domStorageEnabled = true
+                                @Suppress("DEPRECATION")
+                                databaseEnabled = true
+                                setSupportZoom(true)
+                                builtInZoomControls = true
+                                displayZoomControls = false
+                                userAgentString = view.settings.userAgentString
+                            }
+                            profileCookieManager.setAcceptCookie(true)
+                            profileCookieManager.setAcceptThirdPartyCookies(this, true)
+                        }
+
+                        val authDialog = android.app.Dialog(popupContext, android.R.style.Theme_DeviceDefault_Light_NoActionBar_Fullscreen).apply {
+                            setContentView(popupWebView)
+                            setOnDismissListener {
+                                flushCookiesForWebView(view)
+                                popupWebView.destroy()
+                            }
+                        }
+
+                        popupWebView.webChromeClient = object : WebChromeClient() {
+                            override fun onCloseWindow(window: WebView?) {
+                                flushCookiesForWebView(view)
+                                view.reload()
+                                authDialog.dismiss()
+                            }
+                        }
+
+                        popupWebView.webViewClient = object : WebViewClient() {
+                            override fun shouldOverrideUrlLoading(pView: WebView?, request: WebResourceRequest?): Boolean {
+                                val popupUrl = request?.url?.toString() ?: return false
+                                val uri = request.url
+                                val scheme = uri.scheme ?: ""
+                                if (scheme != "http" && scheme != "https") {
+                                    runCatching {
+                                        val intent = Intent(Intent.ACTION_VIEW, uri)
+                                        popupContext.startActivity(intent)
+                                    }
+                                    return true
+                                }
+                                if (isAntigravityHost(popupUrl)) {
+                                    flushCookiesForWebView(view)
+                                    view.loadUrl(popupUrl)
+                                    authDialog.dismiss()
+                                    return true
+                                }
+                                return false
+                            }
+
+                            override fun onPageFinished(pView: WebView?, finishedUrl: String?) {
+                                super.onPageFinished(pView, finishedUrl)
+                                flushCookiesForWebView(view)
+                                if (finishedUrl != null && isAntigravityHost(finishedUrl)) {
+                                    view.loadUrl(finishedUrl)
+                                    authDialog.dismiss()
+                                }
+                            }
+                        }
+
+                        val transport = resultMsg.obj as? WebView.WebViewTransport
+                        transport?.webView = popupWebView
+                        resultMsg.sendToTarget()
+                        authDialog.show()
+                        return true
+                    }
                 }
 
                 webViewClient = object : WebViewClient() {
                     override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
-                        if (!url.isNullOrEmpty()) currentOnUrlChange(AntigravityAuthorization.callbackUrl(url))
-                        if (AuthUrlPolicy.isGoogleAuthUrl(url)) {
-                            view?.stopLoading()
-                            onGoogleAuthRequired(url!!)
-                            return
-                        }
+                        if (!url.isNullOrEmpty()) currentOnUrlChange(url)
                         view?.let {
                             if (isAntigravityHost(url)) injectWebTheme(it, currentIsWebDark)
                         }
                     }
 
                     override fun onPageFinished(view: WebView?, finishedUrl: String?) {
-                        if (!finishedUrl.isNullOrEmpty()) currentOnUrlChange(AntigravityAuthorization.callbackUrl(finishedUrl))
+                        if (!finishedUrl.isNullOrEmpty()) currentOnUrlChange(finishedUrl)
                         currentOnProgressChange(100)
                         flushCookiesForWebView(view)
-                        if (AuthUrlPolicy.isGoogleAuthUrl(finishedUrl)) {
-                            onGoogleAuthRequired(finishedUrl!!)
-                            return
-                        }
                         view?.let {
                             if (isAntigravityHost(finishedUrl)) injectWebTheme(it, currentIsWebDark)
                         }
@@ -366,18 +451,26 @@ fun WebViewContainer(
                         view: WebView?,
                         request: WebResourceRequest?
                     ): Boolean {
-                        if (request?.isForMainFrame == true &&
-                            AuthUrlPolicy.isGoogleAuthUrl(request.url.toString())
-                        ) {
-                            onGoogleAuthRequired(request.url.toString())
-                            return true
+                        val targetUri = request?.url ?: return false
+                        val scheme = targetUri.scheme ?: ""
+
+                        if (scheme != "http" && scheme != "https") {
+                            try {
+                                val intent = Intent(Intent.ACTION_VIEW, targetUri)
+                                context.startActivity(intent)
+                                return true
+                            } catch (_: Exception) {
+                                return true
+                            }
                         }
+
+                        // Keep all HTTP/HTTPS navigation (including Google Accounts login) inside WebView
                         return false
                     }
                 }
 
                 onWebViewCreated(this)
-                loadUrl(AntigravityAuthorization.initialUrl(url, initialAccessToken))
+                loadUrl(url)
             }
         },
         update = { /* Recreated on key(accountId) */ }

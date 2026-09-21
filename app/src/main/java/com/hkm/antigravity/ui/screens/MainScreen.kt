@@ -5,7 +5,6 @@ import android.net.Uri
 import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
 import android.webkit.WebView
-import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -30,11 +29,6 @@ import com.hkm.antigravity.ui.components.DraggableActionPill
 import com.hkm.antigravity.ui.components.SettingsBottomSheet
 import com.hkm.antigravity.ui.components.flushCookiesForWebView
 import com.hkm.antigravity.ui.components.WebViewContainer
-import android.app.Activity
-import androidx.activity.result.IntentSenderRequest
-import com.google.android.gms.auth.api.identity.AuthorizationRequest
-import com.google.android.gms.auth.api.identity.Identity
-import com.google.android.gms.common.api.Scope
 import com.hkm.antigravity.ui.theme.*
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -53,9 +47,6 @@ fun MainScreen(
     var webViewGeneration by remember { mutableIntStateOf(0) }
     var currentUrl by remember { mutableStateOf(activeAccount?.url ?: AccountRepository.DEFAULT_REMOTE_URL) }
     var pageProgress by remember { mutableIntStateOf(0) }
-    var googleAuthUrl by remember { mutableStateOf<String?>(null) }
-    // Access tokens stay in process memory and are never written to storage.
-    var initialAccessToken by remember { mutableStateOf<String?>(null) }
 
     var showAccountSheet by remember { mutableStateOf(false) }
     var showSettingsSheet by remember { mutableStateOf(false) }
@@ -95,61 +86,6 @@ fun MainScreen(
         filePathCallback = null
     }
 
-    fun acceptNativeAuthorization(accessToken: String?) {
-        if (accessToken.isNullOrBlank()) {
-            Toast.makeText(context, "Google did not return an access token. Try again.", Toast.LENGTH_LONG).show()
-            return
-        }
-        googleAuthUrl = null
-        initialAccessToken = accessToken
-        webViewInstance = null
-        webViewGeneration++
-    }
-
-    val nativeAuthorizationLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.StartIntentSenderForResult()
-    ) { result ->
-        val token = result.data?.let { data ->
-            runCatching {
-                Identity.getAuthorizationClient(context).getAuthorizationResultFromIntent(data).accessToken
-            }.getOrNull()
-        }
-        acceptNativeAuthorization(token)
-    }
-
-    fun requestNativeAuthorization() {
-        val activity = context as? Activity
-        if (activity == null) {
-            Toast.makeText(context, "Unable to start Google sign-in.", Toast.LENGTH_LONG).show()
-            return
-        }
-        val request = AuthorizationRequest.builder()
-            .setRequestedScopes(
-                listOf(
-                    Scope("https://www.googleapis.com/auth/cloud-platform"),
-                    Scope("openid"),
-                    Scope("https://www.googleapis.com/auth/userinfo.email"),
-                    Scope("https://www.googleapis.com/auth/userinfo.profile")
-                )
-            )
-            .build()
-        Identity.getAuthorizationClient(activity).authorize(request)
-            .addOnSuccessListener { result ->
-                if (result.hasResolution()) {
-                    result.pendingIntent?.let { pendingIntent ->
-                        nativeAuthorizationLauncher.launch(
-                            IntentSenderRequest.Builder(pendingIntent.intentSender).build()
-                        )
-                    } ?: acceptNativeAuthorization(null)
-                } else {
-                    acceptNativeAuthorization(result.accessToken)
-                }
-            }
-            .addOnFailureListener {
-                Toast.makeText(context, "Google sign-in could not start. Try again.", Toast.LENGTH_LONG).show()
-            }
-    }
-
     // Intercept back button for history navigation
     BackHandler {
         if (webViewInstance?.canGoBack() == true) {
@@ -159,136 +95,105 @@ fun MainScreen(
         }
     }
 
-    val fallbackAccent = MaterialTheme.colorScheme.primary
-    val activeColor = remember(activeAccount, fallbackAccent) {
-        try {
-            Color(android.graphics.Color.parseColor(activeAccount?.colorHex ?: "#3b82f6"))
-        } catch (e: Exception) {
-            fallbackAccent
-        }
-    }
-
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
     ) {
-            val accountId = activeAccount?.id ?: "acc_primary"
-            val targetUrl = activeAccount?.url ?: AccountRepository.DEFAULT_REMOTE_URL
+        val accountId = activeAccount?.id ?: "acc_primary"
+        val targetUrl = activeAccount?.url ?: AccountRepository.DEFAULT_REMOTE_URL
 
-            // Web view taking 100% full screen with IME & navigation bar padding
-            key(accountId, webViewGeneration) {
-                WebViewContainer(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .imePadding()
-                        .navigationBarsPadding()
-                        .statusBarsPadding(),
-                    accountId = accountId,
-                    url = targetUrl,
-                    appThemeMode = settings.themeMode,
-                    webTheme = settings.webTheme,
-                    isDesktopMode = settings.isDesktopMode,
-                    autoConnect = settings.autoConnect,
-                    initialAccessToken = initialAccessToken,
-                    onWebViewCreated = { webView ->
-                        webViewInstance = webView
-                    },
-                    onProgressChange = { pageProgress = it },
-                    onTitleChange = { /* Title update */ },
-                    onUrlChange = { url ->
-                        currentUrl = url
-                    },
-                    onGoogleAuthRequired = { url ->
-                        googleAuthUrl = url
-                    },
-                    onRendererCrashed = {
-                        webViewInstance = null
-                        webViewGeneration++
-                    },
-                    onShowFileChooser = { callback, params ->
-                        filePathCallback?.onReceiveValue(null)
-                        filePathCallback = callback
-
-                        val intent = params?.createIntent() ?: Intent(Intent.ACTION_GET_CONTENT).apply {
-                            type = "*/*"
-                            putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
-                        }
-                        try {
-                            filePickerLauncher.launch(intent)
-                            true
-                        } catch (e: Exception) {
-                            filePathCallback?.onReceiveValue(null)
-                            filePathCallback = null
-                            false
-                        }
-                    }
-                )
-            }
-
-            // Hairline loading indicator at the very top
-            if (pageProgress in 1..99) {
-                LinearProgressIndicator(
-                    progress = { pageProgress / 100f },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .statusBarsPadding()
-                        .height(2.dp),
-                    color = MaterialTheme.colorScheme.primary,
-                    trackColor = Color.Transparent
-                )
-            }
-
-            // Draggable & Dockable Action Pill with deep customization
-            DraggableActionPill(
-                accountColor = activeColor,
-                isDesktopMode = settings.isDesktopMode,
+        // Web view taking 100% full screen with IME & navigation bar padding
+        key(accountId, webViewGeneration) {
+            WebViewContainer(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .imePadding()
+                    .navigationBarsPadding()
+                    .statusBarsPadding(),
+                accountId = accountId,
+                url = targetUrl,
+                appThemeMode = settings.themeMode,
                 webTheme = settings.webTheme,
-                orientation = settings.pillOrientation,
-                scale = settings.pillScale,
-                opacity = settings.pillOpacity,
-                showAccount = settings.showAccountOnPill,
-                showDesktop = settings.showDesktopOnPill,
-                showWebTheme = settings.showWebThemeOnPill,
-                showReload = settings.showReloadOnPill,
-                showSettings = settings.showSettingsOnPill,
-                onAccountClick = { showAccountSheet = true },
-                onToggleDesktopMode = {
-                    settingsRepository.setDesktopMode(!settings.isDesktopMode)
+                isDesktopMode = settings.isDesktopMode,
+                autoConnect = settings.autoConnect,
+                onWebViewCreated = { webView ->
+                    webViewInstance = webView
                 },
-                onToggleWebTheme = {
-                    val next = if (settings.webTheme == "dark") "light" else "dark"
-                    settingsRepository.setWebTheme(next)
+                onProgressChange = { pageProgress = it },
+                onTitleChange = { /* Title update */ },
+                onUrlChange = { url ->
+                    currentUrl = url
                 },
-                onReloadClick = { webViewInstance?.reload() },
-                onSettingsClick = { showSettingsSheet = true }
-            )
-    }
+                onRendererCrashed = {
+                    webViewInstance = null
+                    webViewGeneration++
+                },
+                onShowFileChooser = { callback, params ->
+                    filePathCallback?.onReceiveValue(null)
+                    filePathCallback = callback
 
-    googleAuthUrl?.let {
-        AlertDialog(
-            onDismissRequest = { googleAuthUrl = null },
-            title = { Text("Đăng nhập Google") },
-            text = {
-                Text(
-                    "Antigravity yêu cầu xác thực Google ngoài WebView. " +
-                        "Ứng dụng sẽ dùng màn hình đăng nhập Google chính chủ, rồi quay lại ngay phiên hiện tại."
-                )
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        requestNativeAuthorization()
+                    val intent = params?.createIntent() ?: Intent(Intent.ACTION_GET_CONTENT).apply {
+                        type = "*/*"
+                        putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
                     }
-                ) {
-                    Text("Tiếp tục với Google")
+                    try {
+                        filePickerLauncher.launch(intent)
+                        true
+                    } catch (e: Exception) {
+                        filePathCallback?.onReceiveValue(null)
+                        filePathCallback = null
+                        false
+                    }
                 }
-            },
-            dismissButton = {
-                TextButton(onClick = { googleAuthUrl = null }) {
-                    Text("Đóng")
-                }
+            )
+        }
+
+        // Hairline loading indicator at the very top
+        if (pageProgress in 1..99) {
+            LinearProgressIndicator(
+                progress = { pageProgress / 100f },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(2.dp)
+                    .align(androidx.compose.ui.Alignment.TopCenter)
+                    .statusBarsPadding(),
+                color = MaterialTheme.colorScheme.primary,
+                trackColor = Color.Transparent
+            )
+        }
+
+        val activeColor = remember(activeAccount?.colorHex) {
+            try {
+                Color(android.graphics.Color.parseColor(activeAccount?.colorHex ?: "#4E73DF"))
+            } catch (_: Exception) {
+                Color(0xFF4E73DF)
             }
+        }
+
+        // Floating Action Pill
+        DraggableActionPill(
+            accountColor = activeColor,
+            isDesktopMode = settings.isDesktopMode,
+            webTheme = settings.webTheme,
+            orientation = settings.pillOrientation,
+            scale = settings.pillScale,
+            opacity = settings.pillOpacity,
+            showAccount = settings.showAccountOnPill,
+            showDesktop = settings.showDesktopOnPill,
+            showWebTheme = settings.showWebThemeOnPill,
+            showReload = settings.showReloadOnPill,
+            showSettings = settings.showSettingsOnPill,
+            onAccountClick = { showAccountSheet = true },
+            onToggleDesktopMode = {
+                settingsRepository.setDesktopMode(!settings.isDesktopMode)
+            },
+            onToggleWebTheme = {
+                val next = if (settings.webTheme == "dark") "light" else "dark"
+                settingsRepository.setWebTheme(next)
+            },
+            onReloadClick = { webViewInstance?.reload() },
+            onSettingsClick = { showSettingsSheet = true }
         )
     }
 
@@ -300,8 +205,6 @@ fun MainScreen(
             onDismiss = { showAccountSheet = false },
             onSelectAccount = { target ->
                 flushCookiesForWebView(webViewInstance)
-                // A short-lived grant belongs only to the account that requested it.
-                initialAccessToken = null
                 accountRepository.switchAccount(target.id)
             },
             onAddAccountClick = {
