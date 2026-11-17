@@ -1,9 +1,12 @@
 package com.hkm.antigravity.ui.components
 
 internal object EffortPickerBridge {
-    val allowedOrigins = setOf("https://antigravity.static.usercontent.goog")
+    val allowedOrigins = setOf(
+        "https://antigravity.static.usercontent.goog",
+        "https://antigravity.google.com"
+    )
 
-    // Installed at document start in the remote-control iframe, not the Angular host.
+    // Installed at document start in the remote-control frame/host, not via evaluateJavascript.
     // Use Base UI's public keyboard behavior; never invoke private React handlers.
     val script = """
         (function () {
@@ -51,6 +54,14 @@ internal object EffortPickerBridge {
                     for (var j = 0; j < items.length; j++) items[j].classList.add('anti-context-menu-item-large');
                 }
             }
+            var menuResizeRaf = 0;
+            function scheduleSizeContextMenu() {
+                if (menuResizeRaf) return;
+                menuResizeRaf = requestAnimationFrame(function () {
+                    menuResizeRaf = 0;
+                    sizeContextMenu();
+                });
+            }
             function installContextMenuSizing() {
                 if (document.getElementById('anti-context-menu-style')) return;
                 var style = document.createElement('style');
@@ -63,7 +74,14 @@ internal object EffortPickerBridge {
                 ].join('');
                 (document.head || document.documentElement).appendChild(style);
                 sizeContextMenu();
-                new MutationObserver(sizeContextMenu).observe(document.documentElement, { childList: true, subtree: true });
+                new MutationObserver(function (mutations) {
+                    for (var i = 0; i < mutations.length; i++) {
+                        if (mutations[i].addedNodes && mutations[i].addedNodes.length > 0) {
+                            scheduleSizeContextMenu();
+                            return;
+                        }
+                    }
+                }).observe(document.documentElement, { childList: true, subtree: true });
             }
             if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', installContextMenuSizing, { once: true });
             else installContextMenuSizing();

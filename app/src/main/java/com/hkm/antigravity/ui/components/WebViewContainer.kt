@@ -6,23 +6,105 @@ import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.Color as AndroidColor
 import android.net.Uri
+import android.os.Build
 import android.os.Message
 import android.util.Log
-import android.widget.Toast
+import android.view.View
 import android.view.ViewGroup
 import android.webkit.*
+import android.widget.Toast
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.webkit.ProfileStore
+import androidx.webkit.UserAgentMetadata
 import androidx.webkit.WebSettingsCompat
 import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
 import com.hkm.antigravity.data.repository.AccountRepository
 
-private const val CHROME_DESKTOP_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36"
-private const val CHROME_MOBILE_UA = "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Mobile Safari/537.36"
+private data class ChromiumVersion(
+    val full: String,
+    val major: String
+)
+
+private fun extractChromiumVersion(context: Context): ChromiumVersion {
+    val defaultUa = runCatching { WebSettings.getDefaultUserAgent(context) }.getOrNull().orEmpty()
+    val match = Regex("""Chrome/(\d+\.\d+\.\d+\.\d+)""").find(defaultUa)
+    val full = match?.groupValues?.getOrNull(1) ?: "136.0.0.0"
+    val major = full.substringBefore('.')
+    return ChromiumVersion(full = full, major = major)
+}
+
+private fun buildDesktopUserAgent(version: ChromiumVersion): String =
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${version.full} Safari/537.36"
+
+private fun buildMobileUserAgent(version: ChromiumVersion): String =
+    "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${version.full} Mobile Safari/537.36"
+
+private fun applyUserAgentAndMetadata(
+    view: WebView,
+    useDesktop: Boolean,
+    version: ChromiumVersion
+) {
+    val settings = view.settings
+    settings.userAgentString = if (useDesktop) {
+        buildDesktopUserAgent(version)
+    } else {
+        buildMobileUserAgent(version)
+    }
+
+    if (WebViewFeature.isFeatureSupported(WebViewFeature.USER_AGENT_METADATA)) {
+        try {
+            val brands = listOf(
+                UserAgentMetadata.BrandVersion.Builder()
+                    .setBrand("Not(A:Brand")
+                    .setMajorVersion("99")
+                    .setFullVersion("99.0.0.0")
+                    .build(),
+                UserAgentMetadata.BrandVersion.Builder()
+                    .setBrand("Chromium")
+                    .setMajorVersion(version.major)
+                    .setFullVersion(version.full)
+                    .build(),
+                UserAgentMetadata.BrandVersion.Builder()
+                    .setBrand("Google Chrome")
+                    .setMajorVersion(version.major)
+                    .setFullVersion(version.full)
+                    .build()
+            )
+
+            val builder = UserAgentMetadata.Builder()
+                .setBrandVersionList(brands)
+                .setFullVersion(version.full)
+
+            if (useDesktop) {
+                builder
+                    .setPlatform("Windows")
+                    .setPlatformVersion("10.0.0")
+                    .setArchitecture("x86")
+                    .setBitness(64)
+                    .setMobile(false)
+                    .setModel("")
+                    .setFormFactors(listOf(UserAgentMetadata.FORM_FACTOR_DESKTOP))
+            } else {
+                builder
+                    .setPlatform("Android")
+                    .setPlatformVersion("10.0.0")
+                    .setArchitecture("")
+                    .setBitness(0)
+                    .setMobile(true)
+                    .setModel(Build.MODEL ?: "")
+                    .setFormFactors(listOf(UserAgentMetadata.FORM_FACTOR_MOBILE))
+            }
+
+            WebSettingsCompat.setUserAgentMetadata(settings, builder.build())
+        } catch (e: Exception) {
+            Log.e("WebViewContainer", "Error setting UserAgentMetadata: ${e.message}")
+        }
+    }
+}
 
 internal fun isGoogleAuthUrl(rawUrl: String?): Boolean {
     val host = runCatching { Uri.parse(rawUrl).host?.lowercase() }.getOrNull() ?: return false
@@ -36,64 +118,6 @@ internal fun isAntigravityHost(rawUrl: String?): Boolean {
     val host = runCatching { Uri.parse(rawUrl).host?.lowercase() }.getOrNull() ?: return false
     return host == "antigravity.google.com" || host.endsWith(".antigravity.google.com")
 }
-
-private const val GOOGLE_AUTH_SHIM_SCRIPT = """
-(function() {
-    try {
-        var isWin = (navigator.userAgent || '').indexOf('Windows') !== -1;
-        var brands = [
-            { brand: 'Not(A:Brand', version: '99' },
-            { brand: 'Google Chrome', version: '133' },
-            { brand: 'Chromium', version: '133' }
-        ];
-        if (navigator.userAgentData || isWin) {
-            Object.defineProperty(navigator, 'userAgentData', {
-                get: function() {
-                    return {
-                        brands: brands,
-                        mobile: !isWin,
-                        platform: isWin ? 'Windows' : 'Android',
-                        getHighEntropyValues: function() {
-                            return Promise.resolve({
-                                brands: brands,
-                                mobile: !isWin,
-                                platform: isWin ? 'Windows' : 'Android',
-                                platformVersion: isWin ? '15.0.0' : '14.0.0',
-                                architecture: isWin ? 'x86' : 'arm',
-                                model: '',
-                                uaFullVersion: '133.0.0.0'
-                            });
-                        }
-                    };
-                },
-                configurable: true
-            });
-        }
-    } catch(e) {}
-    try {
-        Object.defineProperty(navigator, 'webdriver', {
-            get: function() { return undefined; },
-            configurable: true
-        });
-    } catch(e) {}
-    try {
-        Object.defineProperty(navigator, 'platform', {
-            get: function() {
-                return (navigator.userAgent || '').indexOf('Windows') !== -1 ? 'Win32' : 'Linux armv8l';
-            },
-            configurable: true
-        });
-    } catch(e) {}
-    try {
-        if (!window.chrome) {
-            window.chrome = {
-                app: { isInstalled: false },
-                runtime: {}
-            };
-        }
-    } catch(e) {}
-})();
-"""
 
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
@@ -124,75 +148,32 @@ fun WebViewContainer(
     }
 
     val currentIsWebDark by rememberUpdatedState(isWebDark)
+    val currentIsDesktopMode by rememberUpdatedState(isDesktopMode)
     val currentAutoConnect by rememberUpdatedState(autoConnect)
     val currentOnUrlChange by rememberUpdatedState(onUrlChange)
     val currentOnProgressChange by rememberUpdatedState(onProgressChange)
     val currentOnTitleChange by rememberUpdatedState(onTitleChange)
     val currentOnShowFileChooser by rememberUpdatedState(onShowFileChooser)
 
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val chromiumVersion = remember(context) { extractChromiumVersion(context) }
     var webViewRef by remember { mutableStateOf<WebView?>(null) }
 
     fun injectWebTheme(view: WebView, dark: Boolean) {
-        val bg = if (dark) "#0C0E14" else "#FFFFFF"
-        val surface = if (dark) "#131314" else "#FFFFFF"
-        val onSurface = if (dark) "#E3E3E3" else "#1F1F1F"
-        val surfaceContainer = if (dark) "#1E1F20" else "#F0F4F9"
         val scheme = if (dark) "dark" else "light"
-
         val script = """
         (function() {
             var dark = $dark;
             var scheme = '$scheme';
-
-            document.documentElement.style.setProperty('color-scheme', scheme, 'important');
-            document.documentElement.setAttribute('data-theme', scheme);
-            document.documentElement.classList.toggle('dark', dark);
-            document.documentElement.classList.toggle('light', !dark);
-            if (document.body) {
-                document.body.style.setProperty('color-scheme', scheme, 'important');
-            }
-
             try {
-                localStorage.setItem('theme', scheme);
-                localStorage.setItem('antigravity_theme', scheme);
-                localStorage.setItem('themeMode', scheme);
+                document.documentElement.style.colorScheme = scheme;
+                if (document.body) {
+                    document.body.classList.toggle('dark-theme', dark);
+                }
+                localStorage.setItem('bcsp', scheme);
             } catch(e) {}
-
-            var styleId = 'antigravity-native-theme';
-            var style = document.getElementById(styleId);
-            if (!style) {
-                style = document.createElement('style');
-                style.id = styleId;
-                (document.head || document.documentElement).appendChild(style);
-            }
-            style.innerHTML = [
-                ':root, html, body {',
-                '  color-scheme: ' + scheme + ' !important;',
-                '  --mat-sys-background: $bg !important;',
-                '  --mat-sys-surface: $surface !important;',
-                '  --mat-sys-on-surface: $onSurface !important;',
-                '  --mat-sys-on-background: $onSurface !important;',
-                '  --mat-sys-surface-container: $surfaceContainer !important;',
-                '  --gm3-sys-color-background: $bg !important;',
-                '  --gm3-sys-color-surface: $surface !important;',
-                '  --gm3-sys-color-on-surface: $onSurface !important;',
-                '  background-color: $bg !important;',
-                '  color: $onSurface !important;',
-                '}',
-                'button[aria-label*="Context" i], button[aria-label*="Add" i],',
-                'button[title*="Context" i], button[title*="Add" i] {',
-                '  min-width: 44px !important; min-height: 44px !important;',
-                '  transform: scale(1.15) !important; transform-origin: center !important;',
-                '}',
-                'button[aria-haspopup="true"], [role="combobox"] {',
-                '  min-height: 38px !important;',
-                '  padding-left: 12px !important; padding-right: 12px !important;',
-                '}',
-                '[role="menu"], [role="listbox"], [role="dialog"], [data-radix-popper-content-wrapper] {',
-                '  z-index: 999999 !important;',
-                '}'
-            ].join('\n');
-
+            var oldStyle = document.getElementById('antigravity-native-theme');
+            if (oldStyle) oldStyle.remove();
         })();
         """.trimIndent()
 
@@ -202,13 +183,10 @@ fun WebViewContainer(
     fun applyThemeToWebView(view: WebView, dark: Boolean) {
         try {
             if (WebViewFeature.isFeatureSupported(WebViewFeature.ALGORITHMIC_DARKENING)) {
-                WebSettingsCompat.setAlgorithmicDarkeningAllowed(view.settings, dark)
+                WebSettingsCompat.setAlgorithmicDarkeningAllowed(view.settings, false)
             } else if (WebViewFeature.isFeatureSupported(WebViewFeature.FORCE_DARK)) {
                 @Suppress("DEPRECATION")
-                WebSettingsCompat.setForceDark(
-                    view.settings,
-                    if (dark) WebSettingsCompat.FORCE_DARK_ON else WebSettingsCompat.FORCE_DARK_OFF
-                )
+                WebSettingsCompat.setForceDark(view.settings, WebSettingsCompat.FORCE_DARK_OFF)
             }
         } catch (e: Exception) {
             Log.e("WebViewContainer", "Error applying theme: ${e.message}")
@@ -227,20 +205,19 @@ fun WebViewContainer(
 
     fun applyDesktopMode(view: WebView, desktop: Boolean) {
         val s = view.settings
-        val currentUrl = view.url
-        if (isGoogleAuthUrl(currentUrl)) {
-            s.userAgentString = CHROME_DESKTOP_UA
-        } else if (desktop) {
-            s.userAgentString = CHROME_DESKTOP_UA
+        applyUserAgentAndMetadata(view, desktop, chromiumVersion)
+        if (desktop) {
             s.useWideViewPort = true
             s.loadWithOverviewMode = true
             s.setSupportZoom(true)
             s.builtInZoomControls = true
             s.displayZoomControls = false
         } else {
-            s.userAgentString = CHROME_MOBILE_UA
             s.useWideViewPort = true
-            s.loadWithOverviewMode = true
+            s.loadWithOverviewMode = false
+            s.setSupportZoom(false)
+            s.builtInZoomControls = false
+            s.displayZoomControls = false
         }
     }
 
@@ -253,9 +230,10 @@ fun WebViewContainer(
 
     AndroidView(
         modifier = modifier,
-        factory = { context ->
-            WebView(context).apply {
+        factory = { viewContext ->
+            WebView(viewContext).apply {
                 webViewRef = this
+                overScrollMode = View.OVER_SCROLL_NEVER
 
                 layoutParams = ViewGroup.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,
@@ -282,9 +260,6 @@ fun WebViewContainer(
                     @Suppress("DEPRECATION")
                     databaseEnabled = true
                     useWideViewPort = true
-                    loadWithOverviewMode = true
-                    setSupportZoom(true)
-                    builtInZoomControls = true
                     displayZoomControls = false
                     cacheMode = WebSettings.LOAD_DEFAULT
                     allowFileAccess = true
@@ -295,37 +270,19 @@ fun WebViewContainer(
                     javaScriptCanOpenWindowsAutomatically = true
                 }
 
-                if (WebViewFeature.isFeatureSupported(WebViewFeature.REQUESTED_WITH_HEADER_ALLOW_LIST)) {
-                    try {
-                        WebSettingsCompat.setRequestedWithHeaderOriginAllowList(settings, emptySet())
-                    } catch (e: Exception) {
-                        Log.e("WebViewContainer", "Error setting header allow list: ${e.message}")
-                    }
-                }
-
-                if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
-                    try {
-                        WebViewCompat.addDocumentStartJavaScript(
-                            this, GOOGLE_AUTH_SHIM_SCRIPT, setOf("*")
-                        )
-                    } catch (e: Exception) {
-                        Log.e("WebViewContainer", "Error adding auth shim: ${e.message}")
-                    }
-                }
-
-                // Register effort picker bridge for remote control cross-origin iframe
+                // Register effort picker bridge for remote control (iframe and direct /remote route)
                 if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
                     try {
                         WebViewCompat.addDocumentStartJavaScript(
                             this, EffortPickerBridge.script, EffortPickerBridge.allowedOrigins
                         )
                     } catch (_: Exception) {
-                        Toast.makeText(context, "Model effort support is unavailable in this WebView.", Toast.LENGTH_LONG).show()
+                        Toast.makeText(viewContext, "Model effort support is unavailable in this WebView.", Toast.LENGTH_LONG).show()
                     }
                 }
 
                 applyThemeToWebView(this, currentIsWebDark)
-                applyDesktopMode(this, isDesktopMode)
+                applyDesktopMode(this, currentIsDesktopMode)
 
                 profileCookieManager.setAcceptCookie(true)
                 profileCookieManager.setAcceptThirdPartyCookies(this, true)
@@ -359,6 +316,7 @@ fun WebViewContainer(
                         val popupContext = view.context
 
                         val popupWebView = WebView(popupContext).apply {
+                            overScrollMode = View.OVER_SCROLL_NEVER
                             layoutParams = ViewGroup.LayoutParams(
                                 ViewGroup.LayoutParams.MATCH_PARENT,
                                 ViewGroup.LayoutParams.MATCH_PARENT
@@ -377,23 +335,13 @@ fun WebViewContainer(
                                 domStorageEnabled = true
                                 @Suppress("DEPRECATION")
                                 databaseEnabled = true
-                                setSupportZoom(true)
-                                builtInZoomControls = true
+                                useWideViewPort = true
+                                loadWithOverviewMode = currentIsDesktopMode
+                                setSupportZoom(currentIsDesktopMode)
+                                builtInZoomControls = currentIsDesktopMode
                                 displayZoomControls = false
-                                userAgentString = CHROME_DESKTOP_UA
                             }
-                            if (WebViewFeature.isFeatureSupported(WebViewFeature.REQUESTED_WITH_HEADER_ALLOW_LIST)) {
-                                try {
-                                    WebSettingsCompat.setRequestedWithHeaderOriginAllowList(settings, emptySet())
-                                } catch (_: Exception) {}
-                            }
-                            if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
-                                try {
-                                    WebViewCompat.addDocumentStartJavaScript(
-                                        this, GOOGLE_AUTH_SHIM_SCRIPT, setOf("*")
-                                    )
-                                } catch (_: Exception) {}
-                            }
+                            applyUserAgentAndMetadata(this, currentIsDesktopMode, chromiumVersion)
                             profileCookieManager.setAcceptCookie(true)
                             profileCookieManager.setAcceptThirdPartyCookies(this, true)
                         }
@@ -409,7 +357,7 @@ fun WebViewContainer(
                         popupWebView.webChromeClient = object : WebChromeClient() {
                             override fun onCloseWindow(window: WebView?) {
                                 flushCookiesForWebView(view)
-                                view.settings.userAgentString = if (isDesktopMode) CHROME_DESKTOP_UA else CHROME_MOBILE_UA
+                                applyUserAgentAndMetadata(view, currentIsDesktopMode, chromiumVersion)
                                 view.reload()
                                 authDialog.dismiss()
                             }
@@ -429,7 +377,7 @@ fun WebViewContainer(
                                 }
                                 if (isAntigravityHost(popupUrl)) {
                                     flushCookiesForWebView(view)
-                                    view.settings.userAgentString = if (isDesktopMode) CHROME_DESKTOP_UA else CHROME_MOBILE_UA
+                                    applyUserAgentAndMetadata(view, currentIsDesktopMode, chromiumVersion)
                                     view.loadUrl(popupUrl)
                                     authDialog.dismiss()
                                     return true
@@ -441,7 +389,7 @@ fun WebViewContainer(
                                 super.onPageFinished(pView, finishedUrl)
                                 flushCookiesForWebView(view)
                                 if (finishedUrl != null && isAntigravityHost(finishedUrl)) {
-                                    view.settings.userAgentString = if (isDesktopMode) CHROME_DESKTOP_UA else CHROME_MOBILE_UA
+                                    applyUserAgentAndMetadata(view, currentIsDesktopMode, chromiumVersion)
                                     view.loadUrl(finishedUrl)
                                     authDialog.dismiss()
                                 }
@@ -459,10 +407,7 @@ fun WebViewContainer(
                 webViewClient = object : WebViewClient() {
                     override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
                         if (!url.isNullOrEmpty()) currentOnUrlChange(url)
-                        if (isGoogleAuthUrl(url)) {
-                            view?.settings?.userAgentString = CHROME_DESKTOP_UA
-                        } else if (isAntigravityHost(url)) {
-                            view?.settings?.userAgentString = if (isDesktopMode) CHROME_DESKTOP_UA else CHROME_MOBILE_UA
+                        if (isAntigravityHost(url)) {
                             view?.let { injectWebTheme(it, currentIsWebDark) }
                         }
                     }
@@ -502,11 +447,27 @@ fun WebViewContainer(
                                     return false;
                                 }
                                 if (tryConnect()) return;
-                                var obs = new MutationObserver(function(m, o) {
-                                    if (tryConnect()) o.disconnect();
+                                var pendingTimer = 0;
+                                var obs = new MutationObserver(function(mutations) {
+                                    if (pendingTimer) return;
+                                    var hasAdded = false;
+                                    for (var i = 0; i < mutations.length; i++) {
+                                        if (mutations[i].addedNodes && mutations[i].addedNodes.length > 0) {
+                                            hasAdded = true;
+                                            break;
+                                        }
+                                    }
+                                    if (!hasAdded) return;
+                                    pendingTimer = setTimeout(function() {
+                                        pendingTimer = 0;
+                                        if (tryConnect()) obs.disconnect();
+                                    }, 250);
                                 });
                                 if (document.body) obs.observe(document.body, {childList:true, subtree:true});
-                                setTimeout(function() { obs.disconnect(); }, 15000);
+                                setTimeout(function() {
+                                    if (pendingTimer) clearTimeout(pendingTimer);
+                                    obs.disconnect();
+                                }, 15000);
                             })();
                             """.trimIndent()
                             view?.evaluateJavascript(jsAutoConnect, null)
@@ -519,7 +480,7 @@ fun WebViewContainer(
                         error: WebResourceError?
                     ) {
                         if (request?.isForMainFrame == true) {
-                            Toast.makeText(context, "Unable to load the remote page. Try Reload.", Toast.LENGTH_LONG).show()
+                            Toast.makeText(viewContext, "Unable to load the remote page. Try Reload.", Toast.LENGTH_LONG).show()
                         }
                     }
 
@@ -529,7 +490,7 @@ fun WebViewContainer(
                         errorResponse: WebResourceResponse?
                     ) {
                         if (request?.isForMainFrame == true && (errorResponse?.statusCode ?: 200) >= 400) {
-                            Toast.makeText(context, "Remote page returned an error. Try Reload.", Toast.LENGTH_LONG).show()
+                            Toast.makeText(viewContext, "Remote page returned an error. Try Reload.", Toast.LENGTH_LONG).show()
                         }
                     }
 
@@ -540,7 +501,7 @@ fun WebViewContainer(
                         flushCookiesForWebView(view)
                         view?.stopLoading()
                         view?.destroy()
-                        Toast.makeText(context, "WebView restarted after a renderer failure.", Toast.LENGTH_LONG).show()
+                        Toast.makeText(viewContext, "WebView restarted after a renderer failure.", Toast.LENGTH_LONG).show()
                         onRendererCrashed()
                         return true
                     }
@@ -550,36 +511,21 @@ fun WebViewContainer(
                         request: WebResourceRequest?
                     ): Boolean {
                         val targetUri = request?.url ?: return false
-                        val targetUrl = targetUri.toString()
                         val scheme = targetUri.scheme ?: ""
 
                         if (scheme != "http" && scheme != "https") {
                             try {
                                 val intent = Intent(Intent.ACTION_VIEW, targetUri)
-                                context.startActivity(intent)
+                                viewContext.startActivity(intent)
                                 return true
                             } catch (_: Exception) {
                                 return true
                             }
                         }
 
-                        if (isGoogleAuthUrl(targetUrl)) {
-                            view?.settings?.userAgentString = CHROME_DESKTOP_UA
-                        } else if (isAntigravityHost(targetUrl)) {
-                            view?.settings?.userAgentString = if (isDesktopMode) CHROME_DESKTOP_UA else CHROME_MOBILE_UA
-                        }
-
                         // Keep all HTTP/HTTPS navigation (including Google Accounts login) inside WebView
                         return false
                     }
-                }
-
-                if (isGoogleAuthUrl(url)) {
-                    settings.userAgentString = CHROME_DESKTOP_UA
-                } else if (isDesktopMode) {
-                    settings.userAgentString = CHROME_DESKTOP_UA
-                } else {
-                    settings.userAgentString = CHROME_MOBILE_UA
                 }
 
                 onWebViewCreated(this)
