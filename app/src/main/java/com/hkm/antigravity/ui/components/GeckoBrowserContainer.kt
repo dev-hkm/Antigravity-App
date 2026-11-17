@@ -69,6 +69,13 @@ class BrowserController(
     fun reload() = reloadAction()
 }
 
+private class GeckoHolder {
+    var view: GeckoView? = null
+    var session: GeckoSession? = null
+    var appliedDesktopMode: Boolean? = null
+    var lastRequestedUrl: String? = null
+}
+
 private data class PopupWindowState(
     val session: GeckoSession,
     val title: String = "Sign in",
@@ -357,12 +364,9 @@ fun GeckoBrowserContainer(
     val currentOnLaunchFilePicker by rememberUpdatedState(onLaunchFilePicker)
 
     val activePorts = remember { mutableListOf<WebExtension.Port>() }
-    var geckoViewRef by remember { mutableStateOf<GeckoView?>(null) }
-    var sessionRef by remember { mutableStateOf<GeckoSession?>(null) }
+    val holder = remember { GeckoHolder() }
     var canGoBackState by remember { mutableStateOf(false) }
-    var appliedDesktopMode by remember { mutableStateOf<Boolean?>(null) }
     var popupState by remember { mutableStateOf<PopupWindowState?>(null) }
-    var lastRequestedUrl by remember { mutableStateOf(url) }
 
     fun buildConfigJson(): JSONObject = JSONObject().apply {
         put("isWebDark", currentIsWebDark)
@@ -412,7 +416,6 @@ fun GeckoBrowserContainer(
 
     LaunchedEffect(isWebDark) {
         GeckoRuntimeHolder.updatePreferredColorScheme(isWebDark)
-        geckoViewRef?.setBackgroundColor(coverColor)
         pushConfigToPorts()
     }
 
@@ -421,9 +424,9 @@ fun GeckoBrowserContainer(
     }
 
     LaunchedEffect(isDesktopMode) {
-        val session = sessionRef ?: return@LaunchedEffect
-        if (appliedDesktopMode == isDesktopMode) return@LaunchedEffect
-        appliedDesktopMode = isDesktopMode
+        val session = holder.session ?: return@LaunchedEffect
+        if (holder.appliedDesktopMode == isDesktopMode) return@LaunchedEffect
+        holder.appliedDesktopMode = isDesktopMode
         session.settings.userAgentMode = if (isDesktopMode) {
             GeckoSessionSettings.USER_AGENT_MODE_DESKTOP
         } else {
@@ -439,9 +442,9 @@ fun GeckoBrowserContainer(
     }
 
     LaunchedEffect(url) {
-        val session = sessionRef ?: return@LaunchedEffect
-        if (url != lastRequestedUrl) {
-            lastRequestedUrl = url
+        val session = holder.session ?: return@LaunchedEffect
+        if (url != holder.lastRequestedUrl) {
+            holder.lastRequestedUrl = url
             session.loadUri(url)
         }
     }
@@ -451,19 +454,17 @@ fun GeckoBrowserContainer(
         factory = { viewContext ->
             val runtime = GeckoRuntimeHolder.getOrCreate(viewContext, currentIsWebDark)
             val session = GeckoSession(createSessionSettings(accountId, currentIsDesktopMode))
-            sessionRef = session
-            appliedDesktopMode = currentIsDesktopMode
+            holder.session = session
+            holder.appliedDesktopMode = currentIsDesktopMode
 
             val gv = GeckoView(viewContext).apply {
                 layoutParams = ViewGroup.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,
                     ViewGroup.LayoutParams.MATCH_PARENT
                 )
-                setViewBackend(GeckoView.BACKEND_TEXTURE_VIEW)
-                setBackgroundColor(coverColor)
                 coverUntilFirstPaint(coverColor)
             }
-            geckoViewRef = gv
+            holder.view = gv
 
             val promptDelegate = createPromptDelegate(viewContext) { intent, cb ->
                 currentOnLaunchFilePicker(intent, cb)
@@ -621,7 +622,7 @@ fun GeckoBrowserContainer(
                 )
             )
 
-            lastRequestedUrl = url
+            holder.lastRequestedUrl = url
             session.loadUri(url)
             gv
         },
@@ -639,7 +640,7 @@ fun GeckoBrowserContainer(
         )
     }
 
-    DisposableEffect(accountId, sessionRef) {
+    DisposableEffect(Unit) {
         onDispose {
             activePorts.toList().forEach { port ->
                 runCatching { port.disconnect() }
@@ -649,14 +650,14 @@ fun GeckoBrowserContainer(
                 runCatching { it.session.close() }
                 popupState = null
             }
-            geckoViewRef?.let { gv ->
+            holder.view?.let { gv ->
                 runCatching { gv.releaseSession() }
             }
-            sessionRef?.let { s ->
+            holder.session?.let { s ->
                 runCatching { s.close() }
             }
-            sessionRef = null
-            geckoViewRef = null
+            holder.session = null
+            holder.view = null
         }
     }
 }
@@ -742,8 +743,6 @@ private fun PopupBrowserDialog(
                                     ViewGroup.LayoutParams.MATCH_PARENT,
                                     ViewGroup.LayoutParams.MATCH_PARENT
                                 )
-                                setViewBackend(GeckoView.BACKEND_TEXTURE_VIEW)
-                                setBackgroundColor(coverColor)
                                 coverUntilFirstPaint(coverColor)
                                 setSession(state.session)
                                 popupGvRef = this
