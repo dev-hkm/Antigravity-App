@@ -15,8 +15,8 @@ android {
         applicationId = "com.hkm.antigravity"
         minSdk = 26
         targetSdk = 36
-        versionCode = 31
-        versionName = "1.11.1"
+        versionCode = 32
+        versionName = "1.11.2"
 
         ndk {
             abiFilters += "arm64-v8a"

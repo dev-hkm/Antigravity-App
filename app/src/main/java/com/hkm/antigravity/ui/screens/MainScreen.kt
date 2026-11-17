@@ -2,6 +2,7 @@ package com.hkm.antigravity.ui.screens
 
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -16,6 +17,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import com.hkm.antigravity.browser.GeckoRuntimeHolder
 import com.hkm.antigravity.data.model.Account
@@ -30,7 +32,7 @@ import com.hkm.antigravity.ui.components.SettingsBottomSheet
 import com.hkm.antigravity.ui.theme.*
 import org.mozilla.geckoview.GeckoResult
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun MainScreen(
     accountRepository: AccountRepository,
@@ -45,7 +47,7 @@ fun MainScreen(
     var browserController by remember { mutableStateOf<BrowserController?>(null) }
     var browserGeneration by remember { mutableIntStateOf(0) }
     var currentUrl by remember { mutableStateOf(activeAccount?.url ?: AccountRepository.DEFAULT_REMOTE_URL) }
-    var pageProgress by remember { mutableIntStateOf(0) }
+    val pageProgressState = remember { mutableIntStateOf(0) }
 
     var showAccountSheet by remember { mutableStateOf(false) }
     var showSettingsSheet by remember { mutableStateOf(false) }
@@ -126,14 +128,25 @@ fun MainScreen(
         val accountId = activeAccount?.id ?: "acc_primary"
         val targetUrl = activeAccount?.url ?: AccountRepository.DEFAULT_REMOTE_URL
 
-        // Embedded Gecko browser taking 100% full screen with IME & navigation bar padding
+        // Embedded Gecko browser taking full screen with settled IME target padding to avoid
+        // per-frame SurfaceView resize storms during keyboard / Recents transitions.
+        val settledImeModifier = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            val density = LocalDensity.current
+            val imeTargetBottomPx = WindowInsets.imeAnimationTarget.getBottom(density)
+            val navBottomPx = WindowInsets.navigationBars.getBottom(density)
+            val settledImeDp = with(density) { maxOf(0, imeTargetBottomPx - navBottomPx).toDp() }
+            Modifier.padding(bottom = settledImeDp)
+        } else {
+            Modifier.imePadding()
+        }
+
         key(accountId, browserGeneration) {
             GeckoBrowserContainer(
                 modifier = Modifier
                     .fillMaxSize()
-                    .imePadding()
                     .navigationBarsPadding()
-                    .statusBarsPadding(),
+                    .statusBarsPadding()
+                    .then(settledImeModifier),
                 accountId = accountId,
                 url = targetUrl,
                 appThemeMode = settings.themeMode,
@@ -143,7 +156,7 @@ fun MainScreen(
                 onControllerReady = { controller ->
                     browserController = controller
                 },
-                onProgressChange = { pageProgress = it },
+                onProgressChange = { pageProgressState.intValue = it },
                 onTitleChange = { /* Title update */ },
                 onUrlChange = { url ->
                     currentUrl = url
@@ -166,19 +179,15 @@ fun MainScreen(
             )
         }
 
-        // Hairline loading indicator at the very top
-        if (pageProgress in 1..99) {
-            LinearProgressIndicator(
-                progress = { pageProgress / 100f },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(2.dp)
-                    .align(androidx.compose.ui.Alignment.TopCenter)
-                    .statusBarsPadding(),
-                color = MaterialTheme.colorScheme.primary,
-                trackColor = Color.Transparent
-            )
-        }
+        // Hairline loading indicator isolated in its own scope so progress ticks never recompose the browser container.
+        TopProgressIndicator(
+            progressState = pageProgressState,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(2.dp)
+                .align(androidx.compose.ui.Alignment.TopCenter)
+                .statusBarsPadding()
+        )
 
         val activeColor = remember(activeAccount?.colorHex) {
             try {
@@ -314,6 +323,22 @@ fun MainScreen(
                 }
                 showAccountDialog = false
             }
+        )
+    }
+}
+
+@Composable
+private fun TopProgressIndicator(
+    progressState: IntState,
+    modifier: Modifier = Modifier
+) {
+    val progress = progressState.intValue
+    if (progress in 1..99) {
+        LinearProgressIndicator(
+            progress = { progress / 100f },
+            modifier = modifier,
+            color = MaterialTheme.colorScheme.primary,
+            trackColor = Color.Transparent
         )
     }
 }

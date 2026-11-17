@@ -16,17 +16,13 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.imePadding
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -35,20 +31,16 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import com.hkm.antigravity.browser.GeckoRuntimeHolder
 import org.json.JSONObject
 import org.mozilla.geckoview.AllowOrDeny
@@ -71,17 +63,11 @@ class BrowserController(
 
 private class GeckoHolder {
     var view: GeckoView? = null
-    var session: GeckoSession? = null
+    var mainSession: GeckoSession? = null
+    var popupSession: GeckoSession? = null
     var appliedDesktopMode: Boolean? = null
     var lastRequestedUrl: String? = null
 }
-
-private data class PopupWindowState(
-    val session: GeckoSession,
-    val title: String = "Sign in",
-    val progress: Int = 0,
-    val canGoBack: Boolean = false
-)
 
 private fun handleNonHttpUri(context: Context, session: GeckoSession?, rawUrl: String): Boolean {
     val uri = runCatching { Uri.parse(rawUrl) }.getOrNull() ?: return true
@@ -366,7 +352,27 @@ fun GeckoBrowserContainer(
     val activePorts = remember { mutableListOf<WebExtension.Port>() }
     val holder = remember { GeckoHolder() }
     var canGoBackState by remember { mutableStateOf(false) }
-    var popupState by remember { mutableStateOf<PopupWindowState?>(null) }
+    var popupTitle by remember { mutableStateOf<String?>(null) }
+    var popupCanGoBack by remember { mutableStateOf(false) }
+
+    fun closePopupSession() {
+        val activePopup = holder.popupSession ?: return
+        holder.popupSession = null
+        popupTitle = null
+        popupCanGoBack = false
+
+        val gv = holder.view
+        val main = holder.mainSession
+        if (gv != null && gv.session === activePopup) {
+            gv.releaseSession()
+        }
+        runCatching { activePopup.close() }
+        if (gv != null && main != null && main.isOpen) {
+            gv.setSession(main)
+            main.setFocused(true)
+        }
+        currentOnProgressChange(100)
+    }
 
     fun buildConfigJson(): JSONObject = JSONObject().apply {
         put("isWebDark", currentIsWebDark)
@@ -424,219 +430,314 @@ fun GeckoBrowserContainer(
     }
 
     LaunchedEffect(isDesktopMode) {
-        val session = holder.session ?: return@LaunchedEffect
+        val main = holder.mainSession ?: return@LaunchedEffect
         if (holder.appliedDesktopMode == isDesktopMode) return@LaunchedEffect
         holder.appliedDesktopMode = isDesktopMode
-        session.settings.userAgentMode = if (isDesktopMode) {
+        val uaMode = if (isDesktopMode) {
             GeckoSessionSettings.USER_AGENT_MODE_DESKTOP
         } else {
             GeckoSessionSettings.USER_AGENT_MODE_MOBILE
         }
-        session.settings.viewportMode = if (isDesktopMode) {
+        val vpMode = if (isDesktopMode) {
             GeckoSessionSettings.VIEWPORT_MODE_DESKTOP
         } else {
             GeckoSessionSettings.VIEWPORT_MODE_MOBILE
         }
+        main.settings.userAgentMode = uaMode
+        main.settings.viewportMode = vpMode
+        holder.popupSession?.let { popup ->
+            popup.settings.userAgentMode = uaMode
+            popup.settings.viewportMode = vpMode
+        }
         pushConfigToPorts()
-        session.reload()
+        (holder.popupSession ?: main).reload()
     }
 
     LaunchedEffect(url) {
-        val session = holder.session ?: return@LaunchedEffect
+        val session = holder.mainSession ?: return@LaunchedEffect
         if (url != holder.lastRequestedUrl) {
             holder.lastRequestedUrl = url
+            closePopupSession()
             session.loadUri(url)
         }
     }
 
-    AndroidView(
-        modifier = modifier,
-        factory = { viewContext ->
-            val runtime = GeckoRuntimeHolder.getOrCreate(viewContext, currentIsWebDark)
-            val session = GeckoSession(createSessionSettings(accountId, currentIsDesktopMode))
-            holder.session = session
-            holder.appliedDesktopMode = currentIsDesktopMode
-
-            val gv = GeckoView(viewContext).apply {
-                layoutParams = ViewGroup.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT,
-                    ViewGroup.LayoutParams.MATCH_PARENT
-                )
-                coverUntilFirstPaint(coverColor)
-            }
-            holder.view = gv
-
-            val promptDelegate = createPromptDelegate(viewContext) { intent, cb ->
-                currentOnLaunchFilePicker(intent, cb)
-            }
-            val permissionDelegate = createPermissionDelegate()
-
-            session.promptDelegate = promptDelegate
-            session.permissionDelegate = permissionDelegate
-
-            session.progressDelegate = object : GeckoSession.ProgressDelegate {
-                override fun onPageStart(session: GeckoSession, url: String) {
-                    currentOnUrlChange(url)
-                    currentOnProgressChange(15)
-                }
-
-                override fun onProgressChange(session: GeckoSession, progress: Int) {
-                    currentOnProgressChange(progress)
-                }
-
-                override fun onPageStop(session: GeckoSession, success: Boolean) {
-                    currentOnProgressChange(100)
-                    pushConfigToPorts()
-                }
-            }
-
-            session.contentDelegate = object : GeckoSession.ContentDelegate {
-                override fun onTitleChange(session: GeckoSession, title: String?) {
-                    if (!title.isNullOrEmpty()) currentOnTitleChange(title)
-                }
-
-                override fun onCrash(session: GeckoSession) {
-                    Toast.makeText(
-                        viewContext,
-                        "Browser engine restarted after a crash.",
-                        Toast.LENGTH_LONG
-                    ).show()
-                    currentOnRendererCrashed()
-                }
-
-                override fun onKill(session: GeckoSession) {
-                    currentOnRendererCrashed()
-                }
-            }
-
-            session.navigationDelegate = object : GeckoSession.NavigationDelegate {
-                override fun onLocationChange(
-                    session: GeckoSession,
-                    url: String?,
-                    perms: MutableList<GeckoSession.PermissionDelegate.ContentPermission>,
-                    hasUserGesture: Boolean
+    Column(modifier = modifier) {
+        popupTitle?.let { activeTitle ->
+            Surface(
+                color = MaterialTheme.colorScheme.surface,
+                contentColor = MaterialTheme.colorScheme.onSurface
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 8.dp, vertical = 2.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    if (!url.isNullOrEmpty()) {
-                        currentOnUrlChange(url)
-                    }
-                }
-
-                override fun onCanGoBack(session: GeckoSession, canGoBack: Boolean) {
-                    canGoBackState = canGoBack
-                }
-
-                override fun onLoadRequest(
-                    session: GeckoSession,
-                    request: GeckoSession.NavigationDelegate.LoadRequest
-                ): GeckoResult<AllowOrDeny> {
-                    if (!isSupportedNavigationScheme(request.uri)) {
-                        handleNonHttpUri(viewContext, session, request.uri)
-                        return GeckoResult.fromValue(AllowOrDeny.DENY)
-                    }
-                    return GeckoResult.fromValue(AllowOrDeny.ALLOW)
-                }
-
-                override fun onLoadError(
-                    session: GeckoSession,
-                    uri: String?,
-                    error: org.mozilla.geckoview.WebRequestError
-                ): GeckoResult<String>? {
-                    Toast.makeText(
-                        viewContext,
-                        "Unable to load page. Try Reload.",
-                        Toast.LENGTH_SHORT
-                    ).show()
-                    return null
-                }
-
-                override fun onNewSession(
-                    session: GeckoSession,
-                    uri: String
-                ): GeckoResult<GeckoSession> {
-                    if (!isSupportedNavigationScheme(uri)) {
-                        handleNonHttpUri(viewContext, session, uri)
-                        return GeckoResult.fromValue(null)
-                    }
-
-                    val child = GeckoSession(createSessionSettings(accountId, currentIsDesktopMode))
-                    child.promptDelegate = promptDelegate
-                    child.permissionDelegate = permissionDelegate
-
-                    child.progressDelegate = object : GeckoSession.ProgressDelegate {
-                        override fun onProgressChange(s: GeckoSession, progress: Int) {
-                            popupState = popupState?.takeIf { it.session === child }?.copy(progress = progress)
-                        }
-
-                        override fun onPageStop(s: GeckoSession, success: Boolean) {
-                            popupState = popupState?.takeIf { it.session === child }?.copy(progress = 100)
-                        }
-                    }
-
-                    child.contentDelegate = object : GeckoSession.ContentDelegate {
-                        override fun onTitleChange(s: GeckoSession, title: String?) {
-                            if (!title.isNullOrBlank()) {
-                                popupState = popupState?.takeIf { it.session === child }?.copy(title = title)
+                    Row(
+                        modifier = Modifier.weight(1f),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        if (popupCanGoBack) {
+                            IconButton(onClick = { holder.popupSession?.goBack() }) {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
+                                    contentDescription = "Back"
+                                )
                             }
                         }
-
-                        override fun onCloseRequest(s: GeckoSession) {
-                            if (popupState?.session === child) {
-                                popupState = null
-                            }
-                            child.close()
-                        }
+                        Text(
+                            text = activeTitle,
+                            style = MaterialTheme.typography.titleSmall,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.padding(horizontal = 8.dp)
+                        )
                     }
-
-                    child.navigationDelegate = object : GeckoSession.NavigationDelegate {
-                        override fun onCanGoBack(s: GeckoSession, canGoBack: Boolean) {
-                            popupState = popupState?.takeIf { it.session === child }?.copy(canGoBack = canGoBack)
-                        }
-
-                        override fun onLoadRequest(
-                            s: GeckoSession,
-                            request: GeckoSession.NavigationDelegate.LoadRequest
-                        ): GeckoResult<AllowOrDeny> {
-                            if (!isSupportedNavigationScheme(request.uri)) {
-                                handleNonHttpUri(viewContext, s, request.uri)
-                                return GeckoResult.fromValue(AllowOrDeny.DENY)
-                            }
-                            return GeckoResult.fromValue(AllowOrDeny.ALLOW)
-                        }
+                    IconButton(onClick = { closePopupSession() }) {
+                        Icon(
+                            imageVector = Icons.Rounded.Close,
+                            contentDescription = "Close"
+                        )
                     }
-
-                    attachExtensionBridge(child)
-                    popupState = PopupWindowState(session = child, title = uri)
-                    return GeckoResult.fromValue(child)
                 }
             }
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+        }
 
-            attachExtensionBridge(session)
-            session.open(runtime)
-            gv.setSession(session)
+        AndroidView(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth(),
+            factory = { viewContext ->
+                val runtime = GeckoRuntimeHolder.getOrCreate(viewContext, currentIsWebDark)
+                val session = GeckoSession(createSessionSettings(accountId, currentIsDesktopMode))
+                holder.mainSession = session
+                holder.appliedDesktopMode = currentIsDesktopMode
 
-            onControllerReady(
-                BrowserController(
-                    canGoBackProvider = { canGoBackState },
-                    goBackAction = { session.goBack() },
-                    reloadAction = { session.reload() }
+                val gv = GeckoView(viewContext).apply {
+                    layoutParams = ViewGroup.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.MATCH_PARENT
+                    )
+                    coverUntilFirstPaint(coverColor)
+                }
+                holder.view = gv
+
+                val promptDelegate = createPromptDelegate(viewContext) { intent, cb ->
+                    currentOnLaunchFilePicker(intent, cb)
+                }
+                val permissionDelegate = createPermissionDelegate()
+
+                session.promptDelegate = promptDelegate
+                session.permissionDelegate = permissionDelegate
+
+                session.progressDelegate = object : GeckoSession.ProgressDelegate {
+                    override fun onPageStart(session: GeckoSession, url: String) {
+                        if (holder.popupSession == null) {
+                            currentOnUrlChange(url)
+                            currentOnProgressChange(15)
+                        }
+                    }
+
+                    override fun onProgressChange(session: GeckoSession, progress: Int) {
+                        if (holder.popupSession == null) {
+                            currentOnProgressChange(progress)
+                        }
+                    }
+
+                    override fun onPageStop(session: GeckoSession, success: Boolean) {
+                        if (holder.popupSession == null) {
+                            currentOnProgressChange(100)
+                        }
+                        pushConfigToPorts()
+                    }
+                }
+
+                session.contentDelegate = object : GeckoSession.ContentDelegate {
+                    override fun onTitleChange(session: GeckoSession, title: String?) {
+                        if (holder.popupSession == null && !title.isNullOrEmpty()) {
+                            currentOnTitleChange(title)
+                        }
+                    }
+
+                    override fun onCrash(session: GeckoSession) {
+                        Toast.makeText(
+                            viewContext,
+                            "Browser engine restarted after a crash.",
+                            Toast.LENGTH_LONG
+                        ).show()
+                        currentOnRendererCrashed()
+                    }
+
+                    override fun onKill(session: GeckoSession) {
+                        currentOnRendererCrashed()
+                    }
+                }
+
+                session.navigationDelegate = object : GeckoSession.NavigationDelegate {
+                    override fun onLocationChange(
+                        session: GeckoSession,
+                        url: String?,
+                        perms: MutableList<GeckoSession.PermissionDelegate.ContentPermission>,
+                        hasUserGesture: Boolean
+                    ) {
+                        if (holder.popupSession == null && !url.isNullOrEmpty()) {
+                            currentOnUrlChange(url)
+                        }
+                    }
+
+                    override fun onCanGoBack(session: GeckoSession, canGoBack: Boolean) {
+                        canGoBackState = canGoBack
+                    }
+
+                    override fun onLoadRequest(
+                        session: GeckoSession,
+                        request: GeckoSession.NavigationDelegate.LoadRequest
+                    ): GeckoResult<AllowOrDeny> {
+                        if (!isSupportedNavigationScheme(request.uri)) {
+                            handleNonHttpUri(viewContext, session, request.uri)
+                            return GeckoResult.fromValue(AllowOrDeny.DENY)
+                        }
+                        return GeckoResult.fromValue(AllowOrDeny.ALLOW)
+                    }
+
+                    override fun onLoadError(
+                        session: GeckoSession,
+                        uri: String?,
+                        error: org.mozilla.geckoview.WebRequestError
+                    ): GeckoResult<String>? {
+                        Toast.makeText(
+                            viewContext,
+                            "Unable to load page. Try Reload.",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                        return null
+                    }
+
+                    override fun onNewSession(
+                        session: GeckoSession,
+                        uri: String
+                    ): GeckoResult<GeckoSession> {
+                        if (!isSupportedNavigationScheme(uri)) {
+                            handleNonHttpUri(viewContext, session, uri)
+                            return GeckoResult.fromValue(null)
+                        }
+
+                        // Close any previous popup cleanly before swapping the single GeckoView to child.
+                        holder.popupSession?.let { oldPopup ->
+                            if (gv.session === oldPopup) gv.releaseSession()
+                            runCatching { oldPopup.close() }
+                            holder.popupSession = null
+                        }
+
+                        val child = GeckoSession(createSessionSettings(accountId, currentIsDesktopMode))
+                        child.promptDelegate = promptDelegate
+                        child.permissionDelegate = permissionDelegate
+
+                        child.progressDelegate = object : GeckoSession.ProgressDelegate {
+                            override fun onPageStart(s: GeckoSession, url: String) {
+                                if (holder.popupSession === child) {
+                                    currentOnProgressChange(15)
+                                }
+                            }
+
+                            override fun onProgressChange(s: GeckoSession, progress: Int) {
+                                if (holder.popupSession === child) {
+                                    currentOnProgressChange(progress)
+                                }
+                            }
+
+                            override fun onPageStop(s: GeckoSession, success: Boolean) {
+                                if (holder.popupSession === child) {
+                                    currentOnProgressChange(100)
+                                }
+                            }
+                        }
+
+                        child.contentDelegate = object : GeckoSession.ContentDelegate {
+                            override fun onTitleChange(s: GeckoSession, title: String?) {
+                                if (holder.popupSession === child && !title.isNullOrBlank()) {
+                                    popupTitle = title
+                                }
+                            }
+
+                            override fun onCloseRequest(s: GeckoSession) {
+                                if (holder.popupSession === child) {
+                                    closePopupSession()
+                                }
+                            }
+
+                            override fun onCrash(s: GeckoSession) {
+                                if (holder.popupSession === child) {
+                                    closePopupSession()
+                                }
+                            }
+                        }
+
+                        child.navigationDelegate = object : GeckoSession.NavigationDelegate {
+                            override fun onCanGoBack(s: GeckoSession, canGoBack: Boolean) {
+                                if (holder.popupSession === child) {
+                                    popupCanGoBack = canGoBack
+                                }
+                            }
+
+                            override fun onLoadRequest(
+                                s: GeckoSession,
+                                request: GeckoSession.NavigationDelegate.LoadRequest
+                            ): GeckoResult<AllowOrDeny> {
+                                if (!isSupportedNavigationScheme(request.uri)) {
+                                    handleNonHttpUri(viewContext, s, request.uri)
+                                    return GeckoResult.fromValue(AllowOrDeny.DENY)
+                                }
+                                return GeckoResult.fromValue(AllowOrDeny.ALLOW)
+                            }
+                        }
+
+                        attachExtensionBridge(child)
+                        holder.popupSession = child
+                        popupCanGoBack = false
+                        popupTitle = uri
+
+                        // Swap the single GeckoView surface onto child once GeckoSession opens it.
+                        gv.post {
+                            if (holder.popupSession === child && child.isOpen) {
+                                gv.releaseSession()
+                                gv.setSession(child)
+                                child.setPriorityHint(GeckoSession.PRIORITY_HIGH)
+                                child.setFocused(true)
+                            }
+                        }
+                        return GeckoResult.fromValue(child)
+                    }
+                }
+
+                attachExtensionBridge(session)
+                session.open(runtime)
+                session.setPriorityHint(GeckoSession.PRIORITY_HIGH)
+                gv.setSession(session)
+
+                onControllerReady(
+                    BrowserController(
+                        canGoBackProvider = { holder.popupSession != null || canGoBackState },
+                        goBackAction = {
+                            val activePopup = holder.popupSession
+                            if (activePopup != null) {
+                                if (popupCanGoBack) activePopup.goBack() else closePopupSession()
+                            } else {
+                                holder.mainSession?.goBack()
+                            }
+                        },
+                        reloadAction = { (holder.popupSession ?: holder.mainSession)?.reload() }
+                    )
                 )
-            )
 
-            holder.lastRequestedUrl = url
-            session.loadUri(url)
-            gv
-        },
-        update = { /* Managed via state & LaunchedEffect */ }
-    )
-
-    popupState?.let { activePopup ->
-        PopupBrowserDialog(
-            state = activePopup,
-            isWebDark = isWebDark,
-            onDismiss = {
-                popupState = null
-                runCatching { activePopup.session.close() }
-            }
+                holder.lastRequestedUrl = url
+                session.loadUri(url)
+                gv
+            },
+            update = { /* Managed via state & LaunchedEffect */ }
         )
     }
 
@@ -646,116 +747,18 @@ fun GeckoBrowserContainer(
                 runCatching { port.disconnect() }
             }
             activePorts.clear()
-            popupState?.let {
-                runCatching { it.session.close() }
-                popupState = null
-            }
             holder.view?.let { gv ->
                 runCatching { gv.releaseSession() }
             }
-            holder.session?.let { s ->
-                runCatching { s.close() }
+            holder.popupSession?.let { popup ->
+                runCatching { popup.close() }
             }
-            holder.session = null
+            holder.mainSession?.let { main ->
+                runCatching { main.close() }
+            }
+            holder.popupSession = null
+            holder.mainSession = null
             holder.view = null
-        }
-    }
-}
-
-@Composable
-private fun PopupBrowserDialog(
-    state: PopupWindowState,
-    isWebDark: Boolean,
-    onDismiss: () -> Unit
-) {
-    val coverColor = if (isWebDark) AndroidColor.parseColor("#0C0E14") else AndroidColor.WHITE
-    Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(
-            usePlatformDefaultWidth = false,
-            decorFitsSystemWindows = false
-        )
-    ) {
-        Surface(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(MaterialTheme.colorScheme.background),
-            color = MaterialTheme.colorScheme.background
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .statusBarsPadding()
-                    .navigationBarsPadding()
-                    .imePadding()
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 8.dp, vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Row(
-                        modifier = Modifier.weight(1f),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        if (state.canGoBack) {
-                            IconButton(onClick = { state.session.goBack() }) {
-                                Icon(
-                                    imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
-                                    contentDescription = "Back"
-                                )
-                            }
-                        }
-                        Text(
-                            text = state.title,
-                            style = MaterialTheme.typography.titleSmall,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.padding(horizontal = 8.dp)
-                        )
-                    }
-                    IconButton(onClick = onDismiss) {
-                        Icon(
-                            imageVector = Icons.Rounded.Close,
-                            contentDescription = "Close"
-                        )
-                    }
-                }
-                if (state.progress in 1..99) {
-                    LinearProgressIndicator(
-                        progress = { state.progress / 100f },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(2.dp),
-                        color = MaterialTheme.colorScheme.primary,
-                        trackColor = Color.Transparent
-                    )
-                }
-                Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
-                    var popupGvRef by remember { mutableStateOf<GeckoView?>(null) }
-                    AndroidView(
-                        modifier = Modifier.fillMaxSize(),
-                        factory = { ctx ->
-                            GeckoView(ctx).apply {
-                                layoutParams = ViewGroup.LayoutParams(
-                                    ViewGroup.LayoutParams.MATCH_PARENT,
-                                    ViewGroup.LayoutParams.MATCH_PARENT
-                                )
-                                coverUntilFirstPaint(coverColor)
-                                setSession(state.session)
-                                popupGvRef = this
-                            }
-                        }
-                    )
-                    DisposableEffect(state.session) {
-                        onDispose {
-                            runCatching { popupGvRef?.releaseSession() }
-                        }
-                    }
-                }
-            }
         }
     }
 }

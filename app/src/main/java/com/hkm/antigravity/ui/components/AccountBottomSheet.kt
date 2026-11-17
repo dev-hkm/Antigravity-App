@@ -10,6 +10,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -30,9 +31,13 @@ fun AccountBottomSheet(
     onAddAccountClick: () -> Unit,
     onEditAccountClick: (Account) -> Unit
 ) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
     ModalBottomSheet(
         onDismissRequest = onDismiss,
+        sheetState = sheetState,
         containerColor = MaterialTheme.colorScheme.surface,
+        contentWindowInsets = { WindowInsets(0) },
         dragHandle = {
             BottomSheetDefaults.DragHandle(color = MaterialTheme.colorScheme.outlineVariant)
         }
@@ -40,6 +45,7 @@ fun AccountBottomSheet(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .navigationBarsPadding()
                 .padding(horizontal = 20.dp, vertical = 8.dp)
         ) {
             Row(
@@ -82,15 +88,18 @@ fun AccountBottomSheet(
             }
 
             LazyColumn(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f, fill = false),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
-                modifier = Modifier.padding(bottom = 24.dp)
+                contentPadding = PaddingValues(bottom = 24.dp)
             ) {
-                items(accounts) { account ->
+                items(accounts, key = { it.id }) { account ->
                     val isActive = account.id == activeAccount?.id
-                    val color = try {
-                        Color(android.graphics.Color.parseColor(account.colorHex))
-                    } catch (e: Exception) {
-                        MaterialTheme.colorScheme.primary
+                    val fallbackColor = MaterialTheme.colorScheme.primary
+                    val color = remember(account.colorHex, fallbackColor) {
+                        runCatching { Color(android.graphics.Color.parseColor(account.colorHex)) }
+                            .getOrDefault(fallbackColor)
                     }
 
                     Row(
@@ -113,7 +122,6 @@ fun AccountBottomSheet(
                             .padding(12.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        // Avatar Initial
                         Box(
                             modifier = Modifier
                                 .size(42.dp)
