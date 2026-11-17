@@ -256,6 +256,27 @@ fun MainScreen(
             onUpdateToolbarButtons = { showAcc, showDesk, showWeb, showRel, showSet ->
                 settingsRepository.setToolbarButtons(showAcc, showDesk, showWeb, showRel, showSet)
             },
+            onOpenInExternalBrowser = {
+                val target = activeAccount?.url ?: currentUrl
+                val uri = runCatching { Uri.parse(target) }.getOrNull()
+                if (uri != null) {
+                    val opened = runCatching {
+                        CustomTabsIntent.Builder()
+                            .setShowTitle(true)
+                            .build()
+                            .launchUrl(context, uri)
+                        true
+                    }.getOrElse {
+                        runCatching {
+                            context.startActivity(Intent(Intent.ACTION_VIEW, uri))
+                            true
+                        }.getOrDefault(false)
+                    }
+                    if (!opened) {
+                        Toast.makeText(context, "Không tìm thấy trình duyệt trên thiết bị.", Toast.LENGTH_LONG).show()
+                    }
+                }
+            },
             onClearCache = {
                 webViewInstance?.clearCache(true)
             }

@@ -24,8 +24,6 @@ import androidx.webkit.WebViewFeature
 import com.hkm.antigravity.data.repository.AccountRepository
 
 private val CHROME_VERSION_REGEX = Regex("""Chrome/(\d+\.\d+\.\d+\.\d+)""")
-private val WV_TOKEN_REGEX = Regex(""";\s*wv(?=\))""")
-private val VERSION_TOKEN_REGEX = Regex("""Version/\d+\.\d+\s*""")
 
 internal fun isGoogleAuthUrl(rawUrl: String?): Boolean {
     val host = runCatching { Uri.parse(rawUrl).host?.lowercase() }.getOrNull() ?: return false
@@ -63,15 +61,8 @@ private fun buildUserAgent(context: Context, desktop: Boolean): ResolvedUserAgen
     val userAgent = if (desktop) {
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/$majorVersion.0.0.0 Safari/537.36"
     } else {
-        defaultUa
-            .replace(WV_TOKEN_REGEX, "")
-            .replace("; wv", "")
-            .replace(VERSION_TOKEN_REGEX, "")
-            .replace(Regex("""\s{2,}"""), " ")
-            .trim()
-            .ifBlank {
-                "Mozilla/5.0 (Linux; Android 14; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/$fullVersion Mobile Safari/537.36"
-            }
+        // Use Chrome Android's reduced User-Agent format so UA matches UserAgentMetadata.
+        "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/$majorVersion.0.0.0 Mobile Safari/537.36"
     }
     return ResolvedUserAgent(userAgent = userAgent, majorVersion = majorVersion, fullVersion = fullVersion)
 }
@@ -168,11 +159,80 @@ private fun handleNonHttpUri(context: Context, webView: WebView?, uri: Uri, rawU
     return true
 }
 
+private class GoogleAuthBridge(
+    private val mainHandler: android.os.Handler,
+    private val onRejected: (String) -> Unit
+) {
+    @JavascriptInterface
+    fun notifyRejected(url: String) {
+        mainHandler.post { onRejected(url) }
+    }
+}
+
+private const val GOOGLE_AUTH_REJECTION_OBSERVER_SCRIPT = """
+(function() {
+    if (window.__antiAuthRejectObs) return;
+    window.__antiAuthRejectObs = true;
+    var reported = false;
+    function checkRejected() {
+        if (reported || !window.__antiAuthBridge) return;
+        var href = (location.href || '').toLowerCase();
+        var text = (document.body && document.body.innerText) || '';
+        if (href.indexOf('/v3/signin/rejected') !== -1 ||
+            href.indexOf('disallowed_useragent') !== -1 ||
+            /browser or app may not be secure|trình duyệt hoặc ứng dụng này có thể không an toàn/i.test(text)) {
+            reported = true;
+            window.__antiAuthBridge.notifyRejected(location.href);
+        }
+    }
+    function start() {
+        checkRejected();
+        if (!document.body) return;
+        var timer = 0;
+        new MutationObserver(function() {
+            if (reported || timer) return;
+            timer = setTimeout(function() {
+                timer = 0;
+                checkRejected();
+            }, 250);
+        }).observe(document.body, { childList: true, subtree: true, characterData: true });
+    }
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', start, { once: true });
+    } else {
+        start();
+    }
+})();
+"""
+
 private const val REMOTE_LAYOUT_POLISH_SCRIPT = """
 (function() {
-    if (window.__antiLayoutPolishV1103) return;
-    window.__antiLayoutPolishV1103 = true;
+    if (window.__antiLayoutPolishV1105) return;
+    window.__antiLayoutPolishV1105 = true;
+    var isDesktopUa = (navigator.userAgent || '').indexOf('Windows NT') !== -1;
+
+    function applyDesktopViewport() {
+        if (!isDesktopUa) return;
+        var meta = document.querySelector('meta[name="viewport"]');
+        if (meta) {
+            if (meta.getAttribute('content') !== 'width=1100') {
+                meta.setAttribute('content', 'width=1100');
+            }
+            return true;
+        }
+        return false;
+    }
+
+    if (isDesktopUa && !applyDesktopViewport()) {
+        var headObs = new MutationObserver(function() {
+            if (applyDesktopViewport()) headObs.disconnect();
+        });
+        headObs.observe(document.documentElement, { childList: true, subtree: true });
+        setTimeout(function() { headObs.disconnect(); }, 5000);
+    }
+
     function installLayoutPolish() {
+        applyDesktopViewport();
         if (document.getElementById('anti-layout-polish-style')) return;
         var style = document.createElement('style');
         style.id = 'anti-layout-polish-style';
@@ -196,6 +256,33 @@ private const val REMOTE_LAYOUT_POLISH_SCRIPT = """
             '[role="dialog"]:has(> [role="navigation"][aria-label="Sidebar"]) {',
             '  height: 100% !important;',
             '  max-height: 100% !important;',
+            '}',
+            '@media (max-width: 767px) {',
+            '  [data-testid="sidebar-split"] > div:first-child:not([style*="visibility: hidden"]):not([style*="visibility:hidden"]) {',
+            '    position: fixed !important;',
+            '    top: 0 !important;',
+            '    bottom: 0 !important;',
+            '    left: 0 !important;',
+            '    width: min(82vw, 280px) !important;',
+            '    max-width: 85vw !important;',
+            '    z-index: 45 !important;',
+            '    background-color: var(--background, var(--shell-canvas, #131314)) !important;',
+            '    border-right: 1px solid var(--border, rgba(128, 128, 128, 0.2)) !important;',
+            '    box-shadow: 6px 0 28px rgba(0, 0, 0, 0.55) !important;',
+            '  }',
+            '  [data-testid="sidebar-split"] > div:first-child [data-split-sized] {',
+            '    width: 100% !important;',
+            '    position: relative !important;',
+            '  }',
+            '  [data-testid="sidebar-split"] > [data-split-sash="true"] {',
+            '    display: none !important;',
+            '  }',
+            '  [data-testid="sidebar-split"] > div:last-child {',
+            '    width: 100% !important;',
+            '    min-width: 0 !important;',
+            '    margin-left: 0 !important;',
+            '    flex: 1 1 100% !important;',
+            '  }',
             '}',
             '[role="navigation"][aria-label="Sidebar"] > .overflow-y-auto,',
             '[data-sidebar-scroll-container="true"],',
@@ -255,6 +342,7 @@ fun WebViewContainer(
     val currentOnShowFileChooser by rememberUpdatedState(onShowFileChooser)
 
     var webViewRef by remember { mutableStateOf<WebView?>(null) }
+    var appliedDesktopMode by remember { mutableStateOf<Boolean?>(null) }
 
     fun injectWebTheme(view: WebView, dark: Boolean) {
         val scheme = if (dark) "dark" else "light"
@@ -294,8 +382,6 @@ fun WebViewContainer(
 
     fun applyThemeToWebView(view: WebView, dark: Boolean) {
         try {
-            // Antigravity Web implements native light/dark themes; disable algorithmic darkening
-            // to avoid double-darkened surfaces and extra compositor paint passes.
             if (WebViewFeature.isFeatureSupported(WebViewFeature.ALGORITHMIC_DARKENING)) {
                 WebSettingsCompat.setAlgorithmicDarkeningAllowed(view.settings, false)
             } else if (WebViewFeature.isFeatureSupported(WebViewFeature.FORCE_DARK)) {
@@ -332,10 +418,11 @@ fun WebViewContainer(
     }
 
     LaunchedEffect(isDesktopMode) {
-        webViewRef?.let { wv ->
-            applyDesktopMode(wv, isDesktopMode)
-            wv.reload()
-        }
+        val wv = webViewRef ?: return@LaunchedEffect
+        if (appliedDesktopMode == isDesktopMode) return@LaunchedEffect
+        appliedDesktopMode = isDesktopMode
+        applyDesktopMode(wv, isDesktopMode)
+        wv.reload()
     }
 
     AndroidView(
@@ -352,6 +439,14 @@ fun WebViewContainer(
                 overScrollMode = View.OVER_SCROLL_NEVER
                 scrollBarStyle = View.SCROLLBARS_INSIDE_OVERLAY
                 isNestedScrollingEnabled = false
+
+                val mainHandler = android.os.Handler(android.os.Looper.getMainLooper())
+                addJavascriptInterface(
+                    GoogleAuthBridge(mainHandler) { rejectedUrl ->
+                        currentOnGoogleAuthRejected(rejectedUrl)
+                    },
+                    "__antiAuthBridge"
+                )
 
                 val profileCookieManager = if (WebViewFeature.isFeatureSupported(WebViewFeature.MULTI_PROFILE)) {
                     try {
@@ -405,6 +500,16 @@ fun WebViewContainer(
 
                     try {
                         WebViewCompat.addDocumentStartJavaScript(
+                            this,
+                            GOOGLE_AUTH_REJECTION_OBSERVER_SCRIPT,
+                            setOf("https://accounts.google.com")
+                        )
+                    } catch (e: Exception) {
+                        Log.e("WebViewContainer", "Error adding auth observer: ${e.message}")
+                    }
+
+                    try {
+                        WebViewCompat.addDocumentStartJavaScript(
                             this, EffortPickerBridge.script, EffortPickerBridge.allowedOrigins
                         )
                     } catch (_: Exception) {
@@ -413,6 +518,7 @@ fun WebViewContainer(
                 }
 
                 applyThemeToWebView(this, currentIsWebDark)
+                appliedDesktopMode = isDesktopMode
                 applyDesktopMode(this, isDesktopMode)
 
                 profileCookieManager.setAcceptCookie(true)
@@ -452,6 +558,12 @@ fun WebViewContainer(
                                 ViewGroup.LayoutParams.MATCH_PARENT
                             )
                             overScrollMode = View.OVER_SCROLL_NEVER
+                            addJavascriptInterface(
+                                GoogleAuthBridge(mainHandler) { rejectedUrl ->
+                                    currentOnGoogleAuthRejected(rejectedUrl)
+                                },
+                                "__antiAuthBridge"
+                            )
                             if (WebViewFeature.isFeatureSupported(WebViewFeature.MULTI_PROFILE)) {
                                 try {
                                     val profileName = "account_$accountId"
@@ -471,6 +583,15 @@ fun WebViewContainer(
                                 setSupportZoom(currentIsDesktopMode)
                                 builtInZoomControls = currentIsDesktopMode
                                 displayZoomControls = false
+                            }
+                            if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
+                                runCatching {
+                                    WebViewCompat.addDocumentStartJavaScript(
+                                        this,
+                                        GOOGLE_AUTH_REJECTION_OBSERVER_SCRIPT,
+                                        setOf("https://accounts.google.com")
+                                    )
+                                }
                             }
                             if (WebViewFeature.isFeatureSupported(WebViewFeature.REQUESTED_WITH_HEADER_ALLOW_LIST)) {
                                 runCatching {
@@ -560,14 +681,6 @@ fun WebViewContainer(
 
                         if (finishedUrl != null && isGoogleAuthRejectedUrl(finishedUrl)) {
                             currentOnGoogleAuthRejected(finishedUrl)
-                        } else if (finishedUrl != null && isGoogleAuthUrl(finishedUrl)) {
-                            view?.evaluateJavascript(
-                                "(function(){var t=(document.body&&document.body.innerText)||'';return /browser or app may not be secure|trình duyệt hoặc ứng dụng này có thể không an toàn|disallowed_useragent/i.test(t);})();"
-                            ) { result ->
-                                if (result == "true") {
-                                    currentOnGoogleAuthRejected(finishedUrl)
-                                }
-                            }
                         }
 
                         if (currentAutoConnect && finishedUrl != null &&

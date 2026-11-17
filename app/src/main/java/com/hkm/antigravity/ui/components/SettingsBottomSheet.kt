@@ -40,6 +40,7 @@ fun SettingsBottomSheet(
     onUpdatePillScale: (String) -> Unit,
     onUpdatePillOpacity: (Float) -> Unit,
     onUpdateToolbarButtons: (showAccount: Boolean, showDesktop: Boolean, showWebTheme: Boolean, showReload: Boolean, showSettings: Boolean) -> Unit,
+    onOpenInExternalBrowser: () -> Unit = {},
     onClearCache: () -> Unit
 ) {
     val context = LocalContext.current
@@ -350,6 +351,43 @@ fun SettingsBottomSheet(
                             onUpdateDesktopMode(it)
                         }
                     )
+                    HorizontalDivider(
+                        modifier = Modifier.padding(vertical = 12.dp),
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                    )
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                onDismiss()
+                                onOpenInExternalBrowser()
+                            }
+                            .padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Lucide.OpenInBrowser,
+                            contentDescription = "Open in Chrome",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(22.dp)
+                        )
+                        Spacer(modifier = Modifier.width(14.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Open in Chrome (Secure Browser)",
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = "Use Chrome Custom Tab if Google Sign-In blocks WebView",
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
                 }
             }
 
