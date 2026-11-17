@@ -1,78 +1,103 @@
-# 🚀 Antigravity Multi-Account Android Client
+<div align="center">
 
-Ứng dụng Android chuyên biệt cho Google Antigravity Web, hỗ trợ quản lý đa tài khoản và một lớp WebView tối ưu cho thao tác nhanh.
+<img src="icon.png" alt="Antigravity Client Logo" width="112" height="112" />
 
----
+# Antigravity Client
 
-## ✨ Điểm Nổi Bật
+**Multi-account Android client for Google Antigravity Remote — powered by Mozilla GeckoView for isolated profiles, native in-app Google Sign-In, and mobile-first ergonomics.**
 
-1. **Đa Tài Khoản Độc Lập (Isolated Partitions)**:
-   - Mỗi tài khoản chạy trong một session riêng biệt (`persist:account_<id>`).
-   - Cookie, Cache, OAuth Token của từng tài khoản được lưu riêng biệt trên ổ đĩa.
-   - **Chỉ cần đăng nhập 1 lần duy nhất cho mỗi tài khoản** — không bao giờ bị đá phiên hay phải xác thực lại mỗi lần chuyển đổi.
+<p>
+  <img src="https://img.shields.io/badge/Kotlin-2.4-7F52FF?style=flat-square&logo=kotlin&logoColor=white" alt="Kotlin 2.4" />
+  <img src="https://img.shields.io/badge/Jetpack_Compose-Material_3-4285F4?style=flat-square&logo=jetpackcompose&logoColor=white" alt="Jetpack Compose Material 3" />
+  <img src="https://img.shields.io/badge/Engine-GeckoView_157-FF7139?style=flat-square&logo=firefox&logoColor=white" alt="GeckoView 157" />
+  <img src="https://img.shields.io/badge/Android-API_26%2B-3DDC84?style=flat-square&logo=android&logoColor=white" alt="Android API 26+" />
+  <img src="https://img.shields.io/badge/License-MIT-111113?style=flat-square" alt="License: MIT" />
+</p>
 
-2. **Chuyển Đổi Tức Thì (Zero-Delay Instant Switch)**:
-   - Giữ các session view sẵn sàng trong bộ nhớ (`WebContentsView`).
-   - Bấm chuyển tài khoản là hiển thị ngay lập tức (không phải reload lại trang từ đầu).
+Built by **[Trần Hoàng Khánh Minh (`dev-hkm`)](https://khanhminh.tech/)** — *Turning Ideas Into Products.*
 
-3. **Tự Động Ghi Nhớ Tài Khoản Cuối**:
-   - Khi tắt app và mở lại, ứng dụng luôn tự động mở đúng tài khoản và vị trí bạn đang làm việc dở dang.
-
-4. **Giao Diện Đậm Chất Antigravity**:
-   - Sidebar quản lý tài khoản phong cách Discord/Slack với màu sắc nhận diện riêng.
-   - Custom Titlebar mượt mà, tối giản.
-   - Thanh điều hướng (Back, Forward, Reload, Home, Zen Mode để ẩn thanh công cụ khi cần 100% diện tích làm việc).
-
-5. **Phím Tắt Siêu Tốc**:
-   - `Ctrl + 1` đến `Ctrl + 9`: Chuyển tức thì sang tài khoản 1..9.
-   - `Ctrl + Tab`: Chuyển sang tài khoản tiếp theo.
-   - `Ctrl + Shift + Tab`: Chuyển về tài khoản trước đó.
-   - `Ctrl + R` hoặc `F5`: Tải lại trang web.
-   - `Ctrl + Shift + I`: Bật/tắt DevTools để debug khi cần.
+</div>
 
 ---
 
-## 💻 Cách Khởi Chạy
+## Why Antigravity Client?
 
-### Cách 1: Click đúp chạy nhanh
-Nhấp đúp chuột vào file **`Run-Antigravity.bat`** tại thư mục này.
+Running Google Antigravity Remote inside a regular mobile browser or a standard Android WebView breaks quickly:
 
-### Cách 2: Bằng Terminal
-```bash
-npm start
+1. **Multi-account juggling**: Switching between personal, work, or team Google accounts in a single browser mixes cookies and forces constant sign-outs.
+2. **WebView OAuth walls**: Google blocks `accounts.google.com` sign-in inside Android `WebView` (`X-Requested-With`), and bouncing out to an external Custom Tab cannot pass session cookies back into an embedded container.
+3. **Desktop-assumed UI on phones**: Split-view sidebars crush down to an unreadable strip on narrow viewports, and hover-based Radix/Base UI submenus (like Model Effort and Context Window pickers) select the parent row on first touch before you can even pick an option.
+
+**Antigravity Client** solves all three by embedding a standalone Firefox engine (**GeckoView 157**), isolating every account inside its own `contextId` container, and bundling a built-in WebExtension tailored for mobile screens.
+
+---
+
+## Key Features
+
+### Standalone GeckoView Browser Engine
+- **In-App Google Sign-In**: Runs on Mozilla's standalone Gecko engine rather than Android System `WebView` — zero `X-Requested-With` injection, permissive cross-origin cookie behavior for Google auth relays, and `ActivityDelegate` support for FIDO/passkey prompts.
+- **Single-Surface Popup Stack**: `window.open` OAuth flows swap cleanly onto the active `GeckoView` with an inline back/close bar and shared account `contextId`, avoiding multi-`SurfaceView` deadlocks when multitasking.
+- **Settled IME Resizing**: Uses `WindowInsets.imeAnimationTarget` (Android 11+) so the viewport resizes once cleanly when opening or dismissing the keyboard without per-frame surface thrashing.
+
+### True Multi-Account Isolation
+- **Container Partitions (`account_<id>`)**: Each profile maintains completely isolated cookies, localStorage, and site data via `GeckoSessionSettings.Builder().contextId(...)`.
+- **Color-Coded Profiles & Custom Endpoints**: Create, rename, color-tag, switch, or wipe individual account containers (defaulting to `https://antigravity.google.com`).
+
+### Mobile WebExtension Ergonomics (`antigravity_ext`)
+- **Responsive Drawer Fix**: Converts `[data-testid="sidebar-split"]` on viewports `< 768px` into a clean slide-over drawer (`min(82vw, 280px)`) while letting the conversation pane take 100% width, with tap-outside dismissal.
+- **Touch Effort & Context Picker Bridge**: Intercepts touch clicks on Base UI/Radix submenu rows (`model-selector-effort-group`, `model-selector-context-window-submenu`) and dispatches directional keyboard events so submenus expand cleanly on mobile without premature selection.
+- **Live Theme & Desktop Toggle**: Syncs web theme (`bcsp`, `body.dark-theme`, `.theme-standalone`, `preferredColorScheme`) via native extension messaging, toggles Mobile/Desktop UA + viewport modes, and optionally auto-clicks Connect.
+
+### Customizable Floating Pill & Material 3 Shell
+- **Draggable Floating Pill**: Snap-to-edge action pill with customizable orientation (Horizontal / Vertical), scale (Compact / Standard / Large), opacity, and per-button visibility toggles.
+- **Full-Height Sheets**: Material 3 Accounts and Settings bottom sheets (`skipPartiallyExpanded = true`) with Dynamic Color (Material You) support on Android 12+.
+
+---
+
+## Project Structure
+
+```text
+app/src/main/
+├── assets/antigravity_ext/     # Built-in GeckoView WebExtension (CSS + document_start + effort picker)
+├── java/com/hkm/antigravity/
+│   ├── MainActivity.kt         # Edge-to-edge activity & repository wiring
+│   ├── browser/                # GeckoRuntimeHolder (singleton runtime, ETP/cookie config, extension loader)
+│   ├── data/                   # Account & Settings models + DataStore / Gson repositories
+│   └── ui/
+│       ├── components/         # GeckoBrowserContainer, DraggableActionPill, BottomSheets, Dialogs
+│       ├── screens/            # MainScreen
+│       └── theme/              # Material 3 theming & Lucide-style icons
+desktop/                        # Legacy Electron desktop companion prototype
+tools/                          # Automated Playwright fixture test for EffortPickerBridge
 ```
 
 ---
 
-## 🛠️ Hướng Dẫn Sử Dụng
+## Tech Stack
 
-1. **Thêm tài khoản mới**:
-   - Bấm nút **`+`** ở thanh sidebar bên trái.
-   - Nhập tên gợi nhớ (VD: `Personal`, `Company`, `Project X`), chọn màu đại diện và URL (mặc định là `https://antigravity.google`).
-   - Bấm **Lưu tài khoản**.
-   - Tiến hành đăng nhập Google/Antigravity lần đầu tiên trên tài khoản mới này.
+- **UI**: Jetpack Compose, Material 3 (Compose BOM `2026.02.01`), Edge-to-Edge WindowInsets
+- **Browser Engine**: Mozilla GeckoView (`org.mozilla.geckoview:geckoview-omni-arm64-v8a:157.0.20261005135250`)
+- **Language & Build**: Kotlin `2.4.20`, Android Gradle Plugin `9.2.1`, Min SDK 26 / Target SDK 36
+- **Persistence**: Jetpack DataStore Preferences & Gson
 
-2. **Chỉnh sửa / Xóa tài khoản**:
-   - Nhấp chuột phải (Right-click) vào biểu tượng tài khoản trên sidebar, hoặc bấm nút cây bút ✏️ trên thanh công cụ.
-   - Bạn có thể đổi tên, đổi màu hoặc bấm **Xóa tài khoản này** (dữ liệu phiên của tài khoản đó sẽ được dọn dẹp an toàn).
+---
 
-3. **Chế độ Zen (Tối đa không gian làm việc)**:
-   - Bấm nút mũi tên thu gọn trên thanh điều hướng để ẩn navbar.
-   - Khi cần mở lại, bấm nút nhỏ ở góc trên bên phải màn hình.
+## Building from Source
 
-## 🔐 Đăng nhập Google trên Android
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/dev-hkm/Antigravity-App.git
+   cd Antigravity-App
+   ```
+2. Ensure Android SDK (compile SDK 37.1, JDK 17/21) is configured in `local.properties` (`sdk.dir=...`).
+3. Build a debug or release APK (`arm64-v8a`):
+   ```bash
+   ./gradlew assembleRelease
+   ```
+   Output APK is written to `app/build/outputs/apk/release/`.
 
-Google không hỗ trợ đăng nhập trong WebView nhúng. Khi Antigravity chuyển sang
-Google OAuth, app tự chuyển sang **Secure Browser Mode** và mở Antigravity bằng
-Chrome Custom Tab (hoặc trình duyệt hệ thống nếu Custom Tab không khả dụng). Chế độ
-này được ghi nhớ để những lần sau mở thẳng đúng surface ổn định, không phụ thuộc vào
-việc browser có thể chép cookie ngược về WebView hay không.
+---
 
-WebView vẫn có thể bật lại trong Settings nếu cần floating toolbar và các tiện ích
-native; tuy nhiên Google sign-in có thể tiếp tục bị chặn theo chính sách của Google.
+## License
 
-### Changelog 1.9.0
-
-- Thêm Secure Browser Mode, tự chuyển khi Google OAuth bị chặn.
-- Ghi nhớ chế độ browser và mở lại Antigravity bằng một chạm.
-- Cập nhật AndroidX WebKit lên 1.17.0 cho lớp tương thích WebView.
+Released under the [MIT License](LICENSE).
