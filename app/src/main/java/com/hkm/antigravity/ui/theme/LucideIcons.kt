@@ -27,4 +27,10 @@ object Lucide {
     val Fullscreen = Icons.Rounded.Fullscreen
     val FullscreenExit = Icons.Rounded.FullscreenExit
     val DragHandle = Icons.Rounded.DragIndicator
+    val ArrowBack = Icons.AutoMirrored.Rounded.ArrowBack
+    val ArrowForward = Icons.AutoMirrored.Rounded.ArrowForward
+    val Home = Icons.Rounded.Home
+    val Copy = Icons.Rounded.ContentCopy
+    val KeepAwake = Icons.Rounded.BrightnessHigh
+    val ClearAccount = Icons.Rounded.PersonOff
 }

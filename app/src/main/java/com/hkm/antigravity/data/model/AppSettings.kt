@@ -7,6 +7,7 @@ data class AppSettings(
     val dynamicColor: Boolean = true,
     val isDesktopMode: Boolean = false,
     val defaultZenMode: Boolean = true,
+    val keepScreenOn: Boolean = false,
     // Toolbar Customization
     val pillOrientation: String = "horizontal", // "horizontal", "vertical"
     val pillScale: String = "standard", // "compact", "standard", "large"

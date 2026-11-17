@@ -1,5 +1,8 @@
 package com.hkm.antigravity.ui.components
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import android.os.Build
 import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
@@ -20,10 +23,14 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.hkm.antigravity.data.model.AppSettings
+import com.hkm.antigravity.ui.theme.AppMotion
 import com.hkm.antigravity.ui.theme.Lucide
+import com.hkm.antigravity.ui.theme.appleEntrance
+import com.hkm.antigravity.ui.theme.appleScaleOnPress
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -39,7 +46,15 @@ fun SettingsBottomSheet(
     onUpdatePillScale: (String) -> Unit,
     onUpdatePillOpacity: (Float) -> Unit,
     onUpdateToolbarButtons: (showAccount: Boolean, showDesktop: Boolean, showWebTheme: Boolean, showReload: Boolean, showSettings: Boolean) -> Unit,
+    currentUrl: String = "",
+    canGoBack: Boolean = false,
+    canGoForward: Boolean = false,
+    onGoBack: () -> Unit = {},
+    onGoForward: () -> Unit = {},
+    onGoHome: () -> Unit = {},
+    onUpdateKeepScreenOn: (Boolean) -> Unit = {},
     onOpenInExternalBrowser: () -> Unit = {},
+    onClearCurrentAccountData: () -> Unit = {},
     onClearCache: () -> Unit
 ) {
     val context = LocalContext.current
@@ -317,11 +332,90 @@ fun SettingsBottomSheet(
                 }
             }
 
+            item(key = "quick_nav") {
+                SettingsSectionHeader(title = "SESSION & NAVIGATION")
+                OutlinedCard(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .appleEntrance(index = 0),
+                    shape = RoundedCornerShape(16.dp),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                    colors = CardDefaults.outlinedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        if (currentUrl.isNotBlank()) {
+                            Text(
+                                text = currentUrl,
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            QuickNavButton(
+                                icon = Lucide.ArrowBack,
+                                label = "Back",
+                                enabled = canGoBack,
+                                modifier = Modifier.weight(1f),
+                                onClick = {
+                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    onDismiss()
+                                    onGoBack()
+                                }
+                            )
+                            QuickNavButton(
+                                icon = Lucide.ArrowForward,
+                                label = "Forward",
+                                enabled = canGoForward,
+                                modifier = Modifier.weight(1f),
+                                onClick = {
+                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    onDismiss()
+                                    onGoForward()
+                                }
+                            )
+                            QuickNavButton(
+                                icon = Lucide.Home,
+                                label = "Home",
+                                enabled = true,
+                                modifier = Modifier.weight(1f),
+                                onClick = {
+                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    onDismiss()
+                                    onGoHome()
+                                }
+                            )
+                            QuickNavButton(
+                                icon = Lucide.Copy,
+                                label = "Copy URL",
+                                enabled = currentUrl.isNotBlank(),
+                                modifier = Modifier.weight(1f),
+                                onClick = {
+                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                    clipboard.setPrimaryClip(ClipData.newPlainText("Antigravity URL", currentUrl))
+                                    Toast.makeText(context, "URL copied", Toast.LENGTH_SHORT).show()
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+
             item(key = "remote_conn") {
                 Spacer(modifier = Modifier.height(6.dp))
                 SettingsSectionHeader(title = "REMOTE CONNECTION")
                 OutlinedCard(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .appleEntrance(index = 1),
                     shape = RoundedCornerShape(16.dp),
                     border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
                     colors = CardDefaults.outlinedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
@@ -358,9 +452,25 @@ fun SettingsBottomSheet(
                             color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
                         )
 
+                        SettingsRowSwitch(
+                            icon = Lucide.KeepAwake,
+                            title = "Keep Screen On",
+                            subtitle = "Prevent sleep while monitoring active agent runs",
+                            checked = settings.keepScreenOn,
+                            onCheckedChange = {
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                onUpdateKeepScreenOn(it)
+                            }
+                        )
+                        HorizontalDivider(
+                            modifier = Modifier.padding(vertical = 12.dp),
+                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                        )
+
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
+                                .appleScaleOnPress(pressedScale = 0.975f)
                                 .clickable {
                                     haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                     onDismiss()
@@ -400,38 +510,84 @@ fun SettingsBottomSheet(
                 OutlinedCard(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clickable {
-                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                            onClearCache()
-                            Toast.makeText(context, "Browser cache cleared", Toast.LENGTH_SHORT).show()
-                        },
+                        .appleEntrance(index = 2),
                     shape = RoundedCornerShape(16.dp),
                     border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
                     colors = CardDefaults.outlinedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
                 ) {
-                    Row(
-                        modifier = Modifier.padding(14.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Lucide.Trash,
-                            contentDescription = "Clear Cache",
-                            tint = MaterialTheme.colorScheme.error,
-                            modifier = Modifier.size(22.dp)
+                    Column(modifier = Modifier.padding(14.dp)) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .appleScaleOnPress(pressedScale = 0.975f)
+                                .clickable {
+                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    onClearCache()
+                                    Toast.makeText(context, "Browser cache cleared", Toast.LENGTH_SHORT).show()
+                                }
+                                .padding(vertical = 2.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Lucide.Trash,
+                                contentDescription = "Clear Cache",
+                                tint = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.size(22.dp)
+                            )
+                            Spacer(modifier = Modifier.width(14.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Clear Browser Cache",
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    text = "Free up memory without logging out accounts",
+                                    fontSize = 12.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+
+                        HorizontalDivider(
+                            modifier = Modifier.padding(vertical = 12.dp),
+                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
                         )
-                        Spacer(modifier = Modifier.width(14.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "Clear Browser Cache",
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.onSurface
+
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .appleScaleOnPress(pressedScale = 0.975f)
+                                .clickable {
+                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    onDismiss()
+                                    onClearCurrentAccountData()
+                                    Toast.makeText(context, "Current account session cleared", Toast.LENGTH_SHORT).show()
+                                }
+                                .padding(vertical = 2.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Lucide.ClearAccount,
+                                contentDescription = "Clear Account Session",
+                                tint = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.size(22.dp)
                             )
-                            Text(
-                                text = "Free up memory without logging out accounts",
-                                fontSize = 12.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
+                            Spacer(modifier = Modifier.width(14.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Reset Current Account Session",
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    text = "Sign out and clear cookies for this profile only",
+                                    fontSize = 12.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
                         }
                     }
                 }
@@ -534,5 +690,59 @@ private fun PillActionToggleRow(
             checked = checked,
             onCheckedChange = onCheckedChange
         )
+    }
+}
+
+@Composable
+private fun QuickNavButton(
+    icon: ImageVector,
+    label: String,
+    enabled: Boolean,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    Surface(
+        modifier = modifier
+            .appleScaleOnPress(enabled = enabled, pressedScale = 0.93f)
+            .clip(RoundedCornerShape(12.dp))
+            .clickable(enabled = enabled, onClick = onClick),
+        shape = RoundedCornerShape(12.dp),
+        color = if (enabled) {
+            MaterialTheme.colorScheme.surfaceContainerHigh
+        } else {
+            MaterialTheme.colorScheme.surfaceContainerLow
+        },
+        border = BorderStroke(
+            width = 1.dp,
+            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = if (enabled) 0.8f else 0.35f)
+        )
+    ) {
+        Column(
+            modifier = Modifier.padding(vertical = 10.dp, horizontal = 4.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = label,
+                tint = if (enabled) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+                },
+                modifier = Modifier.size(18.dp)
+            )
+            Text(
+                text = label,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Medium,
+                maxLines = 1,
+                color = if (enabled) {
+                    MaterialTheme.colorScheme.onSurface
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+                }
+            )
+        }
     }
 }

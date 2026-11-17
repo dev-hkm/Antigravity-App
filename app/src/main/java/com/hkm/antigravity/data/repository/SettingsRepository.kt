@@ -63,6 +63,10 @@ class SettingsRepository(context: Context) {
         saveSettings(_settingsFlow.value.copy(defaultZenMode = enabled))
     }
 
+    fun setKeepScreenOn(enabled: Boolean) {
+        saveSettings(_settingsFlow.value.copy(keepScreenOn = enabled))
+    }
+
     fun setPillOrientation(orientation: String) {
         saveSettings(_settingsFlow.value.copy(pillOrientation = orientation))
     }

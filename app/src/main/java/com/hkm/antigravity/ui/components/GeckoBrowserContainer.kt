@@ -8,6 +8,7 @@ import android.net.Uri
 import android.view.ViewGroup
 import android.widget.EditText
 import android.widget.Toast
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
@@ -42,6 +43,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.hkm.antigravity.browser.GeckoRuntimeHolder
+import com.hkm.antigravity.ui.theme.AppMotion
+import com.hkm.antigravity.ui.theme.appleScaleOnPress
 import org.json.JSONObject
 import org.mozilla.geckoview.AllowOrDeny
 import org.mozilla.geckoview.GeckoResult
@@ -53,12 +56,18 @@ import org.mozilla.geckoview.WebExtension
 @Stable
 class BrowserController(
     private val canGoBackProvider: () -> Boolean,
+    private val canGoForwardProvider: () -> Boolean,
     private val goBackAction: () -> Unit,
-    private val reloadAction: () -> Unit
+    private val goForwardAction: () -> Unit,
+    private val reloadAction: () -> Unit,
+    private val loadHomeAction: (String) -> Unit
 ) {
     fun canGoBack(): Boolean = canGoBackProvider()
+    fun canGoForward(): Boolean = canGoForwardProvider()
     fun goBack() = goBackAction()
+    fun goForward() = goForwardAction()
     fun reload() = reloadAction()
+    fun loadHome(homeUrl: String) = loadHomeAction(homeUrl)
 }
 
 private class GeckoHolder {
@@ -352,14 +361,17 @@ fun GeckoBrowserContainer(
     val activePorts = remember { mutableListOf<WebExtension.Port>() }
     val holder = remember { GeckoHolder() }
     var canGoBackState by remember { mutableStateOf(false) }
+    var canGoForwardState by remember { mutableStateOf(false) }
     var popupTitle by remember { mutableStateOf<String?>(null) }
     var popupCanGoBack by remember { mutableStateOf(false) }
+    var popupCanGoForward by remember { mutableStateOf(false) }
 
     fun closePopupSession() {
         val activePopup = holder.popupSession ?: return
         holder.popupSession = null
         popupTitle = null
         popupCanGoBack = false
+        popupCanGoForward = false
 
         val gv = holder.view
         val main = holder.mainSession
@@ -463,47 +475,59 @@ fun GeckoBrowserContainer(
     }
 
     Column(modifier = modifier) {
-        popupTitle?.let { activeTitle ->
-            Surface(
-                color = MaterialTheme.colorScheme.surface,
-                contentColor = MaterialTheme.colorScheme.onSurface
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 8.dp, vertical = 2.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
+        AnimatedVisibility(
+            visible = popupTitle != null,
+            enter = AppMotion.softExpandEnter,
+            exit = AppMotion.softExpandExit
+        ) {
+            Column {
+                Surface(
+                    color = MaterialTheme.colorScheme.surface,
+                    contentColor = MaterialTheme.colorScheme.onSurface
                 ) {
                     Row(
-                        modifier = Modifier.weight(1f),
-                        verticalAlignment = Alignment.CenterVertically
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 8.dp, vertical = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        if (popupCanGoBack) {
-                            IconButton(onClick = { holder.popupSession?.goBack() }) {
-                                Icon(
-                                    imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
-                                    contentDescription = "Back"
-                                )
+                        Row(
+                            modifier = Modifier.weight(1f),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            if (popupCanGoBack) {
+                                IconButton(
+                                    onClick = { holder.popupSession?.goBack() },
+                                    modifier = Modifier.appleScaleOnPress(pressedScale = 0.88f)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
+                                        contentDescription = "Back"
+                                    )
+                                }
                             }
+                            Text(
+                                text = popupTitle.orEmpty(),
+                                style = MaterialTheme.typography.titleSmall,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.padding(horizontal = 8.dp)
+                            )
                         }
-                        Text(
-                            text = activeTitle,
-                            style = MaterialTheme.typography.titleSmall,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.padding(horizontal = 8.dp)
-                        )
-                    }
-                    IconButton(onClick = { closePopupSession() }) {
-                        Icon(
-                            imageVector = Icons.Rounded.Close,
-                            contentDescription = "Close"
-                        )
+                        IconButton(
+                            onClick = { closePopupSession() },
+                            modifier = Modifier.appleScaleOnPress(pressedScale = 0.88f)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.Close,
+                                contentDescription = "Close"
+                            )
+                        }
                     }
                 }
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
             }
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
         }
 
         AndroidView(
@@ -590,6 +614,10 @@ fun GeckoBrowserContainer(
 
                     override fun onCanGoBack(session: GeckoSession, canGoBack: Boolean) {
                         canGoBackState = canGoBack
+                    }
+
+                    override fun onCanGoForward(session: GeckoSession, canGoForward: Boolean) {
+                        canGoForwardState = canGoForward
                     }
 
                     override fun onLoadRequest(
@@ -683,6 +711,12 @@ fun GeckoBrowserContainer(
                                 }
                             }
 
+                            override fun onCanGoForward(s: GeckoSession, canGoForward: Boolean) {
+                                if (holder.popupSession === child) {
+                                    popupCanGoForward = canGoForward
+                                }
+                            }
+
                             override fun onLoadRequest(
                                 s: GeckoSession,
                                 request: GeckoSession.NavigationDelegate.LoadRequest
@@ -698,6 +732,7 @@ fun GeckoBrowserContainer(
                         attachExtensionBridge(child)
                         holder.popupSession = child
                         popupCanGoBack = false
+                        popupCanGoForward = false
                         popupTitle = uri
 
                         // Swap the single GeckoView surface onto child once GeckoSession opens it.
@@ -721,6 +756,9 @@ fun GeckoBrowserContainer(
                 onControllerReady(
                     BrowserController(
                         canGoBackProvider = { holder.popupSession != null || canGoBackState },
+                        canGoForwardProvider = {
+                            if (holder.popupSession != null) popupCanGoForward else canGoForwardState
+                        },
                         goBackAction = {
                             val activePopup = holder.popupSession
                             if (activePopup != null) {
@@ -729,7 +767,20 @@ fun GeckoBrowserContainer(
                                 holder.mainSession?.goBack()
                             }
                         },
-                        reloadAction = { (holder.popupSession ?: holder.mainSession)?.reload() }
+                        goForwardAction = {
+                            val activePopup = holder.popupSession
+                            if (activePopup != null) {
+                                if (popupCanGoForward) activePopup.goForward()
+                            } else {
+                                holder.mainSession?.goForward()
+                            }
+                        },
+                        reloadAction = { (holder.popupSession ?: holder.mainSession)?.reload() },
+                        loadHomeAction = { homeUrl ->
+                            closePopupSession()
+                            holder.lastRequestedUrl = homeUrl
+                            holder.mainSession?.loadUri(homeUrl)
+                        }
                     )
                 )
 

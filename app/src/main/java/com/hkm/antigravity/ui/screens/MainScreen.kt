@@ -11,6 +11,11 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.browser.customtabs.CustomTabsIntent
 import androidx.compose.animation.*
 import androidx.compose.foundation.background
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -28,6 +33,7 @@ import com.hkm.antigravity.ui.components.AccountDialog
 import com.hkm.antigravity.ui.components.BrowserController
 import com.hkm.antigravity.ui.components.DraggableActionPill
 import com.hkm.antigravity.ui.components.GeckoBrowserContainer
+import com.hkm.antigravity.ui.theme.AppMotion
 import com.hkm.antigravity.ui.components.SettingsBottomSheet
 import com.hkm.antigravity.ui.theme.*
 import org.mozilla.geckoview.GeckoResult
@@ -53,6 +59,18 @@ fun MainScreen(
     var showSettingsSheet by remember { mutableStateOf(false) }
     var showAccountDialog by remember { mutableStateOf(false) }
     var accountToEdit by remember { mutableStateOf<Account?>(null) }
+
+    DisposableEffect(settings.keepScreenOn) {
+        val window = (context as? android.app.Activity)?.window
+        if (settings.keepScreenOn) {
+            window?.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        } else {
+            window?.clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        }
+        onDispose {
+            window?.clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        }
+    }
 
     var pendingActivityResult by remember { mutableStateOf<GeckoResult<Intent>?>(null) }
     val intentSenderLauncher = rememberLauncherForActivityResult(
@@ -275,6 +293,17 @@ fun MainScreen(
             onUpdateToolbarButtons = { showAcc, showDesk, showWeb, showRel, showSet ->
                 settingsRepository.setToolbarButtons(showAcc, showDesk, showWeb, showRel, showSet)
             },
+            currentUrl = currentUrl,
+            canGoBack = browserController?.canGoBack() == true,
+            canGoForward = browserController?.canGoForward() == true,
+            onGoBack = { browserController?.goBack() },
+            onGoForward = { browserController?.goForward() },
+            onGoHome = {
+                browserController?.loadHome(activeAccount?.url ?: AccountRepository.DEFAULT_REMOTE_URL)
+            },
+            onUpdateKeepScreenOn = { enabled ->
+                settingsRepository.setKeepScreenOn(enabled)
+            },
             onOpenInExternalBrowser = {
                 val target = activeAccount?.url ?: currentUrl
                 val uri = runCatching { Uri.parse(target) }.getOrNull()
@@ -294,6 +323,13 @@ fun MainScreen(
                     if (!opened) {
                         Toast.makeText(context, "Không tìm thấy trình duyệt trên thiết bị.", Toast.LENGTH_LONG).show()
                     }
+                }
+            },
+            onClearCurrentAccountData = {
+                val id = activeAccount?.id
+                if (id != null) {
+                    GeckoRuntimeHolder.clearAccountData(id)
+                    browserGeneration++
                 }
             },
             onClearCache = {
@@ -333,10 +369,20 @@ private fun TopProgressIndicator(
     modifier: Modifier = Modifier
 ) {
     val progress = progressState.intValue
-    if (progress in 1..99) {
+    val animatedProgress by animateFloatAsState(
+        targetValue = (progress.coerceIn(0, 100) / 100f),
+        animationSpec = tween(durationMillis = AppMotion.Fast, easing = AppMotion.AppleEaseOut),
+        label = "topProgress"
+    )
+    AnimatedVisibility(
+        visible = progress in 1..99,
+        enter = fadeIn(tween(AppMotion.Micro, easing = AppMotion.AppleSilk)),
+        exit = fadeOut(tween(AppMotion.Fast, easing = AppMotion.AppleEase)),
+        modifier = modifier
+    ) {
         LinearProgressIndicator(
-            progress = { progress / 100f },
-            modifier = modifier,
+            progress = { animatedProgress },
+            modifier = Modifier.fillMaxSize(),
             color = MaterialTheme.colorScheme.primary,
             trackColor = Color.Transparent
         )
