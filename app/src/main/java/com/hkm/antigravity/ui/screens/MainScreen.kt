@@ -5,9 +5,11 @@ import android.net.Uri
 import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
 import android.webkit.WebView
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.browser.customtabs.CustomTabsIntent
 import androidx.compose.animation.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -52,6 +54,7 @@ fun MainScreen(
     var showSettingsSheet by remember { mutableStateOf(false) }
     var showAccountDialog by remember { mutableStateOf(false) }
     var accountToEdit by remember { mutableStateOf<Account?>(null) }
+    var rejectedAuthUrl by remember { mutableStateOf<String?>(null) }
 
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner, webViewInstance) {
@@ -124,6 +127,9 @@ fun MainScreen(
                 onTitleChange = { /* Title update */ },
                 onUrlChange = { url ->
                     currentUrl = url
+                },
+                onGoogleAuthRejected = { authUrl ->
+                    rejectedAuthUrl = authUrl
                 },
                 onRendererCrashed = {
                     webViewInstance = null
@@ -277,6 +283,52 @@ fun MainScreen(
                     accountRepository.deleteAccount(accountToEdit!!.id)
                 }
                 showAccountDialog = false
+            }
+        )
+    }
+
+    rejectedAuthUrl?.let { authUrl ->
+        AlertDialog(
+            onDismissRequest = { rejectedAuthUrl = null },
+            title = { Text("Google chặn đăng nhập WebView") },
+            text = {
+                Text(
+                    "Tài khoản hoặc thiết bị này đang bị Google yêu cầu trình duyệt hệ thống. " +
+                        "Bạn có thể thử chuyển chế độ Desktop/Mobile trong Settings, hoặc mở trực tiếp bằng Chrome Custom Tab."
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        rejectedAuthUrl = null
+                        val target = activeAccount?.url ?: authUrl
+                        val uri = runCatching { Uri.parse(target) }.getOrNull()
+                        if (uri != null) {
+                            val opened = runCatching {
+                                CustomTabsIntent.Builder()
+                                    .setShowTitle(true)
+                                    .build()
+                                    .launchUrl(context, uri)
+                                true
+                            }.getOrElse {
+                                runCatching {
+                                    context.startActivity(Intent(Intent.ACTION_VIEW, uri))
+                                    true
+                                }.getOrDefault(false)
+                            }
+                            if (!opened) {
+                                Toast.makeText(context, "Không tìm thấy trình duyệt trên thiết bị.", Toast.LENGTH_LONG).show()
+                            }
+                        }
+                    }
+                ) {
+                    Text("Mở bằng Chrome")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { rejectedAuthUrl = null }) {
+                    Text("Đóng")
+                }
             }
         )
     }
