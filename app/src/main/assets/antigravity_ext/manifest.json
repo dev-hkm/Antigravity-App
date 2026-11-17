@@ -1,0 +1,34 @@
+{
+  "manifest_version": 2,
+  "name": "Antigravity Native Bridge",
+  "version": "1.11.0",
+  "description": "Mobile layout polish, theme sync, effort picker, and auto-connect integration for Antigravity.",
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "antigravity@hkm.local"
+    }
+  },
+  "permissions": [
+    "nativeMessaging",
+    "nativeMessagingFromContent",
+    "geckoViewAddons"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "https://antigravity.google.com/*",
+        "https://*.antigravity.google.com/*",
+        "https://antigravity.static.usercontent.goog/*"
+      ],
+      "all_frames": true,
+      "run_at": "document_start",
+      "css": [
+        "antigravity.css"
+      ],
+      "js": [
+        "effort_picker.js",
+        "document_start.js"
+      ]
+    }
+  ]
+}

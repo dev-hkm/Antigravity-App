@@ -2,12 +2,10 @@ package com.hkm.antigravity.ui.screens
 
 import android.content.Intent
 import android.net.Uri
-import android.webkit.ValueCallback
-import android.webkit.WebChromeClient
-import android.webkit.WebView
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.browser.customtabs.CustomTabsIntent
 import androidx.compose.animation.*
@@ -15,23 +13,22 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.ui.platform.LocalContext
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
-import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import com.hkm.antigravity.browser.GeckoRuntimeHolder
 import com.hkm.antigravity.data.model.Account
 import com.hkm.antigravity.data.repository.AccountRepository
 import com.hkm.antigravity.data.repository.SettingsRepository
 import com.hkm.antigravity.ui.components.AccountBottomSheet
 import com.hkm.antigravity.ui.components.AccountDialog
+import com.hkm.antigravity.ui.components.BrowserController
 import com.hkm.antigravity.ui.components.DraggableActionPill
+import com.hkm.antigravity.ui.components.GeckoBrowserContainer
 import com.hkm.antigravity.ui.components.SettingsBottomSheet
-import com.hkm.antigravity.ui.components.flushCookiesForWebView
-import com.hkm.antigravity.ui.components.WebViewContainer
 import com.hkm.antigravity.ui.theme.*
+import org.mozilla.geckoview.GeckoResult
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -45,8 +42,8 @@ fun MainScreen(
     val settings by settingsRepository.settingsFlow.collectAsState()
     val context = LocalContext.current
 
-    var webViewInstance by remember { mutableStateOf<WebView?>(null) }
-    var webViewGeneration by remember { mutableIntStateOf(0) }
+    var browserController by remember { mutableStateOf<BrowserController?>(null) }
+    var browserGeneration by remember { mutableIntStateOf(0) }
     var currentUrl by remember { mutableStateOf(activeAccount?.url ?: AccountRepository.DEFAULT_REMOTE_URL) }
     var pageProgress by remember { mutableIntStateOf(0) }
 
@@ -54,21 +51,44 @@ fun MainScreen(
     var showSettingsSheet by remember { mutableStateOf(false) }
     var showAccountDialog by remember { mutableStateOf(false) }
     var accountToEdit by remember { mutableStateOf<Account?>(null) }
-    var rejectedAuthUrl by remember { mutableStateOf<String?>(null) }
 
-    val lifecycleOwner = LocalLifecycleOwner.current
-    DisposableEffect(lifecycleOwner, webViewInstance) {
-        val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_PAUSE || event == Lifecycle.Event.ON_STOP) {
-                flushCookiesForWebView(webViewInstance)
-            }
+    var pendingActivityResult by remember { mutableStateOf<GeckoResult<Intent>?>(null) }
+    val intentSenderLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartIntentSenderForResult()
+    ) { result ->
+        val pending = pendingActivityResult
+        pendingActivityResult = null
+        if (result.resultCode == android.app.Activity.RESULT_OK) {
+            pending?.complete(result.data)
+        } else {
+            pending?.completeExceptionally(Exception("Cancelled"))
         }
-        lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    DisposableEffect(Unit) {
+        GeckoRuntimeHolder.setActivityLauncher { pendingIntent ->
+            val result = GeckoResult<Intent>()
+            pendingActivityResult?.completeExceptionally(Exception("Superseded"))
+            pendingActivityResult = result
+            runCatching {
+                intentSenderLauncher.launch(
+                    IntentSenderRequest.Builder(pendingIntent.intentSender).build()
+                )
+            }.onFailure { err ->
+                pendingActivityResult = null
+                result.completeExceptionally(err)
+            }
+            result
+        }
+        onDispose {
+            GeckoRuntimeHolder.setActivityLauncher(null)
+            pendingActivityResult?.completeExceptionally(Exception("Disposed"))
+            pendingActivityResult = null
+        }
     }
 
     // File / Media Chooser Support
-    var filePathCallback by remember { mutableStateOf<ValueCallback<Array<Uri>>?>(null) }
+    var pendingFileCallback by remember { mutableStateOf<((Array<Uri>?) -> Unit)?>(null) }
 
     val filePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
@@ -85,14 +105,14 @@ fun MainScreen(
             }
         } else null
 
-        filePathCallback?.onReceiveValue(uris)
-        filePathCallback = null
+        pendingFileCallback?.invoke(uris)
+        pendingFileCallback = null
     }
 
     // Intercept back button for history navigation
     BackHandler {
-        if (webViewInstance?.canGoBack() == true) {
-            webViewInstance?.goBack()
+        if (browserController?.canGoBack() == true) {
+            browserController?.goBack()
         } else {
             onFinish()
         }
@@ -106,9 +126,9 @@ fun MainScreen(
         val accountId = activeAccount?.id ?: "acc_primary"
         val targetUrl = activeAccount?.url ?: AccountRepository.DEFAULT_REMOTE_URL
 
-        // Web view taking 100% full screen with IME & navigation bar padding
-        key(accountId, webViewGeneration) {
-            WebViewContainer(
+        // Embedded Gecko browser taking 100% full screen with IME & navigation bar padding
+        key(accountId, browserGeneration) {
+            GeckoBrowserContainer(
                 modifier = Modifier
                     .fillMaxSize()
                     .imePadding()
@@ -120,35 +140,26 @@ fun MainScreen(
                 webTheme = settings.webTheme,
                 isDesktopMode = settings.isDesktopMode,
                 autoConnect = settings.autoConnect,
-                onWebViewCreated = { webView ->
-                    webViewInstance = webView
+                onControllerReady = { controller ->
+                    browserController = controller
                 },
                 onProgressChange = { pageProgress = it },
                 onTitleChange = { /* Title update */ },
                 onUrlChange = { url ->
                     currentUrl = url
                 },
-                onGoogleAuthRejected = { authUrl ->
-                    rejectedAuthUrl = authUrl
-                },
                 onRendererCrashed = {
-                    webViewInstance = null
-                    webViewGeneration++
+                    browserController = null
+                    browserGeneration++
                 },
-                onShowFileChooser = { callback, params ->
-                    filePathCallback?.onReceiveValue(null)
-                    filePathCallback = callback
-
-                    val intent = params?.createIntent() ?: Intent(Intent.ACTION_GET_CONTENT).apply {
-                        type = "*/*"
-                        putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
-                    }
+                onLaunchFilePicker = { intent, callback ->
+                    pendingFileCallback?.invoke(null)
+                    pendingFileCallback = callback
                     try {
                         filePickerLauncher.launch(intent)
                         true
-                    } catch (e: Exception) {
-                        filePathCallback?.onReceiveValue(null)
-                        filePathCallback = null
+                    } catch (_: Exception) {
+                        pendingFileCallback = null
                         false
                     }
                 }
@@ -198,7 +209,7 @@ fun MainScreen(
                 val next = if (settings.webTheme == "dark") "light" else "dark"
                 settingsRepository.setWebTheme(next)
             },
-            onReloadClick = { webViewInstance?.reload() },
+            onReloadClick = { browserController?.reload() },
             onSettingsClick = { showSettingsSheet = true }
         )
     }
@@ -210,7 +221,6 @@ fun MainScreen(
             activeAccount = activeAccount,
             onDismiss = { showAccountSheet = false },
             onSelectAccount = { target ->
-                flushCookiesForWebView(webViewInstance)
                 accountRepository.switchAccount(target.id)
             },
             onAddAccountClick = {
@@ -278,7 +288,7 @@ fun MainScreen(
                 }
             },
             onClearCache = {
-                webViewInstance?.clearCache(true)
+                GeckoRuntimeHolder.clearCache()
             }
         )
     }
@@ -290,7 +300,6 @@ fun MainScreen(
             canDelete = accounts.size > 1,
             onDismiss = { showAccountDialog = false },
             onSave = { name, colorHex, url ->
-                flushCookiesForWebView(webViewInstance)
                 if (accountToEdit != null) {
                     accountRepository.updateAccount(accountToEdit!!.id, name, colorHex, url)
                 } else {
@@ -300,56 +309,10 @@ fun MainScreen(
             },
             onDelete = {
                 if (accountToEdit != null) {
-                    flushCookiesForWebView(webViewInstance)
+                    GeckoRuntimeHolder.clearAccountData(accountToEdit!!.id)
                     accountRepository.deleteAccount(accountToEdit!!.id)
                 }
                 showAccountDialog = false
-            }
-        )
-    }
-
-    rejectedAuthUrl?.let { authUrl ->
-        AlertDialog(
-            onDismissRequest = { rejectedAuthUrl = null },
-            title = { Text("Google chặn đăng nhập WebView") },
-            text = {
-                Text(
-                    "Tài khoản hoặc thiết bị này đang bị Google yêu cầu trình duyệt hệ thống. " +
-                        "Bạn có thể thử chuyển chế độ Desktop/Mobile trong Settings, hoặc mở trực tiếp bằng Chrome Custom Tab."
-                )
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        rejectedAuthUrl = null
-                        val target = activeAccount?.url ?: authUrl
-                        val uri = runCatching { Uri.parse(target) }.getOrNull()
-                        if (uri != null) {
-                            val opened = runCatching {
-                                CustomTabsIntent.Builder()
-                                    .setShowTitle(true)
-                                    .build()
-                                    .launchUrl(context, uri)
-                                true
-                            }.getOrElse {
-                                runCatching {
-                                    context.startActivity(Intent(Intent.ACTION_VIEW, uri))
-                                    true
-                                }.getOrDefault(false)
-                            }
-                            if (!opened) {
-                                Toast.makeText(context, "Không tìm thấy trình duyệt trên thiết bị.", Toast.LENGTH_LONG).show()
-                            }
-                        }
-                    }
-                ) {
-                    Text("Mở bằng Chrome")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { rejectedAuthUrl = null }) {
-                    Text("Đóng")
-                }
             }
         )
     }

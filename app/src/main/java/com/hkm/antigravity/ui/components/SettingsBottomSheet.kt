@@ -376,13 +376,13 @@ fun SettingsBottomSheet(
                         Spacer(modifier = Modifier.width(14.dp))
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = "Open in Chrome (Secure Browser)",
+                                text = "Open in External Browser",
                                 fontSize = 14.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                             Text(
-                                text = "Use Chrome Custom Tab if Google Sign-In blocks WebView",
+                                text = "Launch the current page in your device default browser",
                                 fontSize = 12.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -402,7 +402,7 @@ fun SettingsBottomSheet(
                     .clickable {
                         haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                         onClearCache()
-                        Toast.makeText(context, "WebView cache cleared", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, "Browser cache cleared", Toast.LENGTH_SHORT).show()
                     },
                 shape = RoundedCornerShape(16.dp),
                 border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
@@ -421,7 +421,7 @@ fun SettingsBottomSheet(
                     Spacer(modifier = Modifier.width(14.dp))
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = "Clear WebView Cache",
+                            text = "Clear Browser Cache",
                             fontSize = 14.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = MaterialTheme.colorScheme.onSurface

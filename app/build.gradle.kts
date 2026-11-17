@@ -15,8 +15,12 @@ android {
         applicationId = "com.hkm.antigravity"
         minSdk = 26
         targetSdk = 36
-        versionCode = 29
-        versionName = "1.10.5"
+        versionCode = 30
+        versionName = "1.11.0"
+
+        ndk {
+            abiFilters += "arm64-v8a"
+        }
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -37,6 +41,11 @@ android {
     buildFeatures {
         compose = true
     }
+    packaging {
+        jniLibs {
+            useLegacyPackaging = true
+        }
+    }
 }
 
 dependencies {
@@ -51,7 +60,7 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.11.0")
     implementation("androidx.datastore:datastore-preferences:1.1.2")
     implementation("androidx.browser:browser:1.10.0")
-    implementation("androidx.webkit:webkit:1.17.0")
+    implementation("org.mozilla.geckoview:geckoview-omni-arm64-v8a:157.0.20261005135250")
     implementation("androidx.compose.material:material-icons-extended")
     implementation("com.google.code.gson:gson:2.11.0")
 
