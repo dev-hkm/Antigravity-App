@@ -5,7 +5,9 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.Color as AndroidColor
 import android.net.Uri
+import android.provider.OpenableColumns
 import android.view.ViewGroup
+import android.webkit.MimeTypeMap
 import android.widget.EditText
 import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
@@ -46,6 +48,12 @@ import com.hkm.antigravity.browser.GeckoRuntimeHolder
 import com.hkm.antigravity.ui.theme.AppMotion
 import com.hkm.antigravity.ui.theme.appleScaleOnPress
 import org.json.JSONObject
+import java.io.File
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.mozilla.geckoview.AllowOrDeny
 import org.mozilla.geckoview.GeckoResult
 import org.mozilla.geckoview.GeckoSession
@@ -131,6 +139,83 @@ private fun createSessionSettings(accountId: String, desktop: Boolean): GeckoSes
         .build()
 }
 
+private val uploadScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+
+private fun normalizeAcceptedMimeTypes(rawTypes: Array<out String>?): List<String> {
+    if (rawTypes == null) return emptyList()
+    val mimeMap = MimeTypeMap.getSingleton()
+    return rawTypes
+        .flatMap { it.split(',') }
+        .map { it.trim() }
+        .filter { it.isNotEmpty() }
+        .mapNotNull { token ->
+            when {
+                token.contains('/') -> token
+                token.startsWith('.') -> mimeMap.getMimeTypeFromExtension(token.removePrefix(".").lowercase())
+                else -> mimeMap.getMimeTypeFromExtension(token.lowercase())
+            }
+        }
+        .distinct()
+}
+
+private fun cleanupStaleUploadTempFiles(uploadRoot: File) {
+    val cutoff = System.currentTimeMillis() - 60L * 60L * 1000L
+    uploadRoot.listFiles()?.forEach { child ->
+        if (child.lastModified() < cutoff) {
+            child.deleteRecursively()
+        }
+    }
+}
+
+private fun resolveDisplayName(context: Context, uri: Uri, index: Int): String {
+    var name: String? = null
+    runCatching {
+        context.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
+            if (cursor.moveToFirst()) {
+                val col = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                if (col >= 0) {
+                    name = cursor.getString(col)
+                }
+            }
+        }
+    }
+    val sanitized = name
+        ?.trim()
+        ?.replace(Regex("[^a-zA-Z0-9._-]"), "_")
+        ?.takeIf { it.isNotBlank() }
+    if (sanitized != null) return sanitized
+
+    val mime = runCatching { context.contentResolver.getType(uri) }.getOrNull()
+    val ext = mime?.let { MimeTypeMap.getSingleton().getExtensionFromMimeType(it) } ?: "bin"
+    return "upload_${System.currentTimeMillis()}_$index.$ext"
+}
+
+private fun materializeUploadUris(context: Context, uris: Array<Uri>): Array<Uri> {
+    val uploadRoot = File(context.cacheDir, "gecko_uploads").apply { mkdirs() }
+    cleanupStaleUploadTempFiles(uploadRoot)
+    val batchToken = System.currentTimeMillis()
+    val resolved = mutableListOf<Uri>()
+
+    uris.forEachIndexed { index, uri ->
+        if (uri.scheme.equals("file", ignoreCase = true)) {
+            resolved += uri
+            return@forEachIndexed
+        }
+        val fileName = resolveDisplayName(context, uri, index)
+        val itemDir = File(uploadRoot, "${batchToken}_$index").apply { mkdirs() }
+        val targetFile = File(itemDir, fileName)
+        context.contentResolver.openInputStream(uri)?.use { input ->
+            targetFile.outputStream().use { output ->
+                input.copyTo(output)
+            }
+        } ?: throw IllegalStateException("Cannot open selected file stream")
+        if (targetFile.exists() && targetFile.length() > 0L) {
+            resolved += Uri.fromFile(targetFile)
+        }
+    }
+    return resolved.toTypedArray()
+}
+
 private fun createPromptDelegate(
     context: Context,
     onLaunchFilePicker: (Intent, (Array<Uri>?) -> Unit) -> Boolean
@@ -141,9 +226,10 @@ private fun createPromptDelegate(
             prompt: GeckoSession.PromptDelegate.FilePrompt
         ): GeckoResult<GeckoSession.PromptDelegate.PromptResponse> {
             val result = GeckoResult<GeckoSession.PromptDelegate.PromptResponse>()
-            val intent = Intent(Intent.ACTION_GET_CONTENT).apply {
+            val baseIntent = Intent(Intent.ACTION_GET_CONTENT).apply {
                 addCategory(Intent.CATEGORY_OPENABLE)
-                val accepted = prompt.mimeTypes?.filter { it.isNotBlank() } ?: emptyList()
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                val accepted = normalizeAcceptedMimeTypes(prompt.mimeTypes)
                 if (accepted.size == 1) {
                     type = accepted[0]
                 } else {
@@ -156,21 +242,40 @@ private fun createPromptDelegate(
                     putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
                 }
             }
-            val launched = onLaunchFilePicker(intent) { uris ->
-                if (uris != null && uris.isNotEmpty()) {
-                    runCatching {
-                        val response =
-                            if (prompt.type == GeckoSession.PromptDelegate.FilePrompt.Type.MULTIPLE) {
-                                prompt.confirm(context, uris)
-                            } else {
-                                prompt.confirm(context, uris[0])
-                            }
-                        result.complete(response)
+            val chooserIntent = Intent.createChooser(baseIntent, "Select file")
+            val launched = onLaunchFilePicker(chooserIntent) { uris ->
+                if (uris == null || uris.isEmpty()) {
+                    result.complete(prompt.dismiss())
+                    return@onLaunchFilePicker
+                }
+                uploadScope.launch {
+                    val localUris = runCatching {
+                        withContext(Dispatchers.IO) {
+                            materializeUploadUris(context.applicationContext, uris)
+                        }
+                    }
+                    localUris.onSuccess { readyUris ->
+                        if (readyUris.isEmpty()) {
+                            Toast.makeText(context, "Không đọc được tệp đã chọn.", Toast.LENGTH_SHORT).show()
+                            result.complete(prompt.dismiss())
+                            return@onSuccess
+                        }
+                        runCatching {
+                            val response =
+                                if (prompt.type == GeckoSession.PromptDelegate.FilePrompt.Type.MULTIPLE) {
+                                    prompt.confirm(context, readyUris)
+                                } else {
+                                    prompt.confirm(context, readyUris[0])
+                                }
+                            result.complete(response)
+                        }.onFailure {
+                            Toast.makeText(context, "Không thể tải tệp lên.", Toast.LENGTH_SHORT).show()
+                            result.complete(prompt.dismiss())
+                        }
                     }.onFailure {
+                        Toast.makeText(context, "Không thể truy cập tệp đã chọn.", Toast.LENGTH_SHORT).show()
                         result.complete(prompt.dismiss())
                     }
-                } else {
-                    result.complete(prompt.dismiss())
                 }
             }
             if (!launched) {
