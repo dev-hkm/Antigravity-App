@@ -57,6 +57,7 @@ object GeckoRuntimeHolder {
             .build()
 
         val created = GeckoRuntime.create(appContext, settings)
+        created.webNotificationDelegate = AppNotificationHelper.createWebNotificationDelegate(appContext)
         created.activityDelegate = GeckoRuntime.ActivityDelegate { pendingIntent ->
             activityLauncher?.invoke(pendingIntent)
                 ?: GeckoResult.fromException(IllegalStateException("No active Activity launcher"))

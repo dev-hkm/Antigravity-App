@@ -53,6 +53,7 @@ fun SettingsBottomSheet(
     onGoForward: () -> Unit = {},
     onGoHome: () -> Unit = {},
     onUpdateKeepScreenOn: (Boolean) -> Unit = {},
+    onUpdateNotifications: (Boolean) -> Unit = {},
     onOpenInExternalBrowser: () -> Unit = {},
     onClearCurrentAccountData: () -> Unit = {},
     onClearCache: () -> Unit
@@ -460,6 +461,21 @@ fun SettingsBottomSheet(
                             onCheckedChange = {
                                 haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                 onUpdateKeepScreenOn(it)
+                            }
+                        )
+                        HorizontalDivider(
+                            modifier = Modifier.padding(vertical = 12.dp),
+                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                        )
+
+                        SettingsRowSwitch(
+                            icon = Lucide.Notifications,
+                            title = "Agent Notifications",
+                            subtitle = "Allow Antigravity to send Android system notifications",
+                            checked = settings.enableNotifications,
+                            onCheckedChange = {
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                onUpdateNotifications(it)
                             }
                         )
                         HorizontalDivider(

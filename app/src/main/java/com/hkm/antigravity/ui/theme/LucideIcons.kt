@@ -33,4 +33,6 @@ object Lucide {
     val Copy = Icons.Rounded.ContentCopy
     val KeepAwake = Icons.Rounded.BrightnessHigh
     val ClearAccount = Icons.Rounded.PersonOff
+    val Notifications = Icons.Rounded.Notifications
+    val Lock = Icons.Rounded.Lock
 }

@@ -24,6 +24,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
+import com.hkm.antigravity.browser.AppNotificationHelper
 import com.hkm.antigravity.browser.GeckoRuntimeHolder
 import com.hkm.antigravity.data.model.Account
 import com.hkm.antigravity.data.repository.AccountRepository
@@ -129,6 +130,29 @@ fun MainScreen(
         pendingFileCallback = null
     }
 
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (!granted) {
+            Toast.makeText(
+                context,
+                "Bạn có thể bật lại quyền Thông báo trong Cài đặt Android.",
+                Toast.LENGTH_SHORT
+            ).show()
+        }
+    }
+
+    LaunchedEffect(settings.enableNotifications) {
+        AppNotificationHelper.notificationsEnabled = settings.enableNotifications
+        if (
+            settings.enableNotifications &&
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            !AppNotificationHelper.hasPostPermission(context)
+        ) {
+            notificationPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+        }
+    }
+
     // Intercept back button for history navigation
     BackHandler {
         if (browserController?.canGoBack() == true) {
@@ -171,6 +195,7 @@ fun MainScreen(
                 webTheme = settings.webTheme,
                 isDesktopMode = settings.isDesktopMode,
                 autoConnect = settings.autoConnect,
+                notificationsEnabled = settings.enableNotifications,
                 onControllerReady = { controller ->
                     browserController = controller
                 },
@@ -304,8 +329,18 @@ fun MainScreen(
             onUpdateKeepScreenOn = { enabled ->
                 settingsRepository.setKeepScreenOn(enabled)
             },
+            onUpdateNotifications = { enabled ->
+                settingsRepository.setEnableNotifications(enabled)
+                if (
+                    enabled &&
+                    Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                    !AppNotificationHelper.hasPostPermission(context)
+                ) {
+                    notificationPermissionLauncher.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+                }
+            },
             onOpenInExternalBrowser = {
-                val target = activeAccount?.url ?: currentUrl
+                val target = currentUrl.ifBlank { activeAccount?.url ?: AccountRepository.DEFAULT_REMOTE_URL }
                 val uri = runCatching { Uri.parse(target) }.getOrNull()
                 if (uri != null) {
                     val opened = runCatching {

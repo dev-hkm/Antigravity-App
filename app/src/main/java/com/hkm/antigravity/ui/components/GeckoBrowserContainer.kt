@@ -1,15 +1,19 @@
 package com.hkm.antigravity.ui.components
 
 import android.app.AlertDialog
+import android.app.DownloadManager
 import android.content.Context
 import android.content.Intent
 import android.graphics.Color as AndroidColor
 import android.net.Uri
+import android.os.Environment
 import android.provider.OpenableColumns
 import android.view.ViewGroup
 import android.webkit.MimeTypeMap
+import android.webkit.URLUtil
 import android.widget.EditText
 import android.widget.Toast
+import androidx.browser.customtabs.CustomTabsIntent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -17,12 +21,17 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.automirrored.rounded.ArrowForward
 import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.Lock
+import androidx.compose.material.icons.rounded.OpenInBrowser
+import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -44,6 +53,11 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.sp
+import com.hkm.antigravity.browser.AppNotificationHelper
 import com.hkm.antigravity.browser.GeckoRuntimeHolder
 import com.hkm.antigravity.ui.theme.AppMotion
 import com.hkm.antigravity.ui.theme.appleScaleOnPress
@@ -60,6 +74,7 @@ import org.mozilla.geckoview.GeckoSession
 import org.mozilla.geckoview.GeckoSessionSettings
 import org.mozilla.geckoview.GeckoView
 import org.mozilla.geckoview.WebExtension
+import org.mozilla.geckoview.WebResponse
 
 @Stable
 class BrowserController(
@@ -399,13 +414,74 @@ private fun createPromptDelegate(
     }
 }
 
-private fun createPermissionDelegate(): GeckoSession.PermissionDelegate {
+private fun handleExternalDownload(context: Context, response: WebResponse) {
+    val uriStr = response.uri
+    val uri = runCatching { Uri.parse(uriStr) }.getOrNull() ?: return
+    val scheme = uri.scheme?.lowercase().orEmpty()
+    if (scheme != "http" && scheme != "https") {
+        runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, uri)) }
+        return
+    }
+    val contentType = response.headers["content-type"] ?: response.headers["Content-Type"]
+    val contentDisposition = response.headers["content-disposition"] ?: response.headers["Content-Disposition"]
+    val fileName = URLUtil.guessFileName(uriStr, contentDisposition, contentType)
+
+    val enqueued = runCatching {
+        val dm = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+        val request = DownloadManager.Request(uri).apply {
+            setTitle(fileName)
+            setDescription("Downloading via Antigravity")
+            setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
+            setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, fileName)
+            if (!contentType.isNullOrBlank()) {
+                setMimeType(contentType.substringBefore(';').trim())
+            }
+        }
+        dm.enqueue(request)
+        true
+    }.getOrDefault(false)
+
+    if (enqueued) {
+        Toast.makeText(context, "Đang tải xuống: $fileName", Toast.LENGTH_SHORT).show()
+    } else {
+        runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, uri)) }
+    }
+}
+
+private fun openUrlExternally(context: Context, targetUrl: String) {
+    val uri = runCatching { Uri.parse(targetUrl) }.getOrNull() ?: return
+    val opened = runCatching {
+        CustomTabsIntent.Builder()
+            .setShowTitle(true)
+            .build()
+            .launchUrl(context, uri)
+        true
+    }.getOrElse {
+        runCatching {
+            context.startActivity(Intent(Intent.ACTION_VIEW, uri))
+            true
+        }.getOrDefault(false)
+    }
+    if (!opened) {
+        Toast.makeText(context, "Không tìm thấy trình duyệt trên thiết bị.", Toast.LENGTH_LONG).show()
+    }
+}
+
+private fun createPermissionDelegate(
+    notificationsEnabledProvider: () -> Boolean
+): GeckoSession.PermissionDelegate {
     return object : GeckoSession.PermissionDelegate {
         override fun onContentPermissionRequest(
             session: GeckoSession,
             perm: GeckoSession.PermissionDelegate.ContentPermission
         ): GeckoResult<Int> {
             val value = when (perm.permission) {
+                GeckoSession.PermissionDelegate.PERMISSION_DESKTOP_NOTIFICATION ->
+                    if (notificationsEnabledProvider()) {
+                        GeckoSession.PermissionDelegate.ContentPermission.VALUE_ALLOW
+                    } else {
+                        GeckoSession.PermissionDelegate.ContentPermission.VALUE_DENY
+                    }
                 GeckoSession.PermissionDelegate.PERMISSION_STORAGE_ACCESS,
                 GeckoSession.PermissionDelegate.PERMISSION_PERSISTENT_STORAGE,
                 GeckoSession.PermissionDelegate.PERMISSION_AUTOPLAY_INAUDIBLE,
@@ -435,6 +511,7 @@ fun GeckoBrowserContainer(
     webTheme: String = "dark",
     isDesktopMode: Boolean = false,
     autoConnect: Boolean = true,
+    notificationsEnabled: Boolean = true,
     onControllerReady: (BrowserController) -> Unit,
     onProgressChange: (Int) -> Unit,
     onTitleChange: (String) -> Unit,
@@ -457,17 +534,23 @@ fun GeckoBrowserContainer(
     val currentIsWebDark by rememberUpdatedState(isWebDark)
     val currentIsDesktopMode by rememberUpdatedState(isDesktopMode)
     val currentAutoConnect by rememberUpdatedState(autoConnect)
+    val currentNotificationsEnabled by rememberUpdatedState(notificationsEnabled)
     val currentOnProgressChange by rememberUpdatedState(onProgressChange)
     val currentOnTitleChange by rememberUpdatedState(onTitleChange)
     val currentOnUrlChange by rememberUpdatedState(onUrlChange)
     val currentOnRendererCrashed by rememberUpdatedState(onRendererCrashed)
     val currentOnLaunchFilePicker by rememberUpdatedState(onLaunchFilePicker)
 
+    LaunchedEffect(notificationsEnabled) {
+        AppNotificationHelper.notificationsEnabled = notificationsEnabled
+    }
+
     val activePorts = remember { mutableListOf<WebExtension.Port>() }
     val holder = remember { GeckoHolder() }
     var canGoBackState by remember { mutableStateOf(false) }
     var canGoForwardState by remember { mutableStateOf(false) }
     var popupTitle by remember { mutableStateOf<String?>(null) }
+    var popupUrl by remember { mutableStateOf<String?>(null) }
     var popupCanGoBack by remember { mutableStateOf(false) }
     var popupCanGoForward by remember { mutableStateOf(false) }
 
@@ -475,6 +558,7 @@ fun GeckoBrowserContainer(
         val activePopup = holder.popupSession ?: return
         holder.popupSession = null
         popupTitle = null
+        popupUrl = null
         popupCanGoBack = false
         popupCanGoForward = false
 
@@ -593,40 +677,114 @@ fun GeckoBrowserContainer(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 8.dp, vertical = 2.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
+                            .padding(horizontal = 6.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Row(
-                            modifier = Modifier.weight(1f),
-                            verticalAlignment = Alignment.CenterVertically
+                        if (popupCanGoBack) {
+                            IconButton(
+                                onClick = { holder.popupSession?.goBack() },
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .appleScaleOnPress(pressedScale = 0.88f)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
+                                    contentDescription = "Back",
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        }
+                        if (popupCanGoForward) {
+                            IconButton(
+                                onClick = { holder.popupSession?.goForward() },
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .appleScaleOnPress(pressedScale = 0.88f)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Rounded.ArrowForward,
+                                    contentDescription = "Forward",
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        }
+                        Column(
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(horizontal = 6.dp)
                         ) {
-                            if (popupCanGoBack) {
-                                IconButton(
-                                    onClick = { holder.popupSession?.goBack() },
-                                    modifier = Modifier.appleScaleOnPress(pressedScale = 0.88f)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
-                                        contentDescription = "Back"
+                            Text(
+                                text = popupTitle.orEmpty(),
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            val displayUrl = popupUrl.orEmpty()
+                            if (displayUrl.isNotBlank()) {
+                                val isSecure = displayUrl.startsWith("https://", ignoreCase = true)
+                                val host = remember(displayUrl) {
+                                    runCatching { Uri.parse(displayUrl).host }.getOrNull() ?: displayUrl
+                                }
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    if (isSecure) {
+                                        Icon(
+                                            imageVector = Icons.Rounded.Lock,
+                                            contentDescription = "HTTPS",
+                                            tint = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(11.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(3.dp))
+                                    }
+                                    Text(
+                                        text = host,
+                                        fontSize = 11.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
                                     )
                                 }
                             }
-                            Text(
-                                text = popupTitle.orEmpty(),
-                                style = MaterialTheme.typography.titleSmall,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.padding(horizontal = 8.dp)
+                        }
+                        IconButton(
+                            onClick = { holder.popupSession?.reload() },
+                            modifier = Modifier
+                                .size(36.dp)
+                                .appleScaleOnPress(pressedScale = 0.88f)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.Refresh,
+                                contentDescription = "Reload",
+                                modifier = Modifier.size(19.dp)
                             )
+                        }
+                        if (!popupUrl.isNullOrBlank()) {
+                            IconButton(
+                                onClick = {
+                                    val target = popupUrl ?: return@IconButton
+                                    openUrlExternally(context, target)
+                                },
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .appleScaleOnPress(pressedScale = 0.88f)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.OpenInBrowser,
+                                    contentDescription = "Open in External Browser",
+                                    modifier = Modifier.size(19.dp)
+                                )
+                            }
                         }
                         IconButton(
                             onClick = { closePopupSession() },
-                            modifier = Modifier.appleScaleOnPress(pressedScale = 0.88f)
+                            modifier = Modifier
+                                .size(36.dp)
+                                .appleScaleOnPress(pressedScale = 0.88f)
                         ) {
                             Icon(
                                 imageVector = Icons.Rounded.Close,
-                                contentDescription = "Close"
+                                contentDescription = "Close",
+                                modifier = Modifier.size(20.dp)
                             )
                         }
                     }
@@ -657,7 +815,7 @@ fun GeckoBrowserContainer(
                 val promptDelegate = createPromptDelegate(viewContext) { intent, cb ->
                     currentOnLaunchFilePicker(intent, cb)
                 }
-                val permissionDelegate = createPermissionDelegate()
+                val permissionDelegate = createPermissionDelegate { currentNotificationsEnabled }
 
                 session.promptDelegate = promptDelegate
                 session.permissionDelegate = permissionDelegate
@@ -702,6 +860,10 @@ fun GeckoBrowserContainer(
 
                     override fun onKill(session: GeckoSession) {
                         currentOnRendererCrashed()
+                    }
+
+                    override fun onExternalResponse(session: GeckoSession, response: WebResponse) {
+                        handleExternalDownload(viewContext, response)
                     }
                 }
 
@@ -807,9 +969,24 @@ fun GeckoBrowserContainer(
                                     closePopupSession()
                                 }
                             }
+
+                            override fun onExternalResponse(s: GeckoSession, response: WebResponse) {
+                                handleExternalDownload(viewContext, response)
+                            }
                         }
 
                         child.navigationDelegate = object : GeckoSession.NavigationDelegate {
+                            override fun onLocationChange(
+                                s: GeckoSession,
+                                url: String?,
+                                perms: MutableList<GeckoSession.PermissionDelegate.ContentPermission>,
+                                hasUserGesture: Boolean
+                            ) {
+                                if (holder.popupSession === child && !url.isNullOrBlank()) {
+                                    popupUrl = url
+                                }
+                            }
+
                             override fun onCanGoBack(s: GeckoSession, canGoBack: Boolean) {
                                 if (holder.popupSession === child) {
                                     popupCanGoBack = canGoBack
@@ -838,6 +1015,7 @@ fun GeckoBrowserContainer(
                         holder.popupSession = child
                         popupCanGoBack = false
                         popupCanGoForward = false
+                        popupUrl = uri
                         popupTitle = uri
 
                         // Swap the single GeckoView surface onto child once GeckoSession opens it.

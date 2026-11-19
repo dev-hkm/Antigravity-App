@@ -67,6 +67,10 @@ class SettingsRepository(context: Context) {
         saveSettings(_settingsFlow.value.copy(keepScreenOn = enabled))
     }
 
+    fun setEnableNotifications(enabled: Boolean) {
+        saveSettings(_settingsFlow.value.copy(enableNotifications = enabled))
+    }
+
     fun setPillOrientation(orientation: String) {
         saveSettings(_settingsFlow.value.copy(pillOrientation = orientation))
     }

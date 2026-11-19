@@ -8,6 +8,7 @@ data class AppSettings(
     val isDesktopMode: Boolean = false,
     val defaultZenMode: Boolean = true,
     val keepScreenOn: Boolean = false,
+    val enableNotifications: Boolean = true,
     // Toolbar Customization
     val pillOrientation: String = "horizontal", // "horizontal", "vertical"
     val pillScale: String = "standard", // "compact", "standard", "large"
